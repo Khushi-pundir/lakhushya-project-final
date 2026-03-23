@@ -43,6 +43,7 @@ useEffect(() => {
   const [pickupDate, setPickupDate] = useState("");
   const [pickupTime, setPickupTime] = useState("");
   const [address, setAddress] = useState("");
+  // eslint-disable-next-line
   const isRegistered = (event) => {
   return event.registeredUsers?.some(
     (u) => u.userId === donorId && u.role === "Donor"

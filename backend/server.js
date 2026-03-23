@@ -14,27 +14,56 @@ mongoose.connect("mongodb://127.0.0.1:27017/lakhushya_db")
   .catch(err => console.log(err));
 
 app.post("/register", async (req, res) => {
-  const { name, email, password, role } = req.body;
+
+  const {
+    name,
+    email,
+    password,
+    role,
+    phone,
+    address,
+    pincode,
+    city,
+    state,
+    nationality,
+    dob
+  } = req.body;
+
   if (role === "Admin") {
-  return res.status(403).send("Admin registration not allowed");
+    return res.status(403).send("Admin registration not allowed");
   }
 
-  // check if user already exists
   const existingUser = await User.findOne({ email });
+
   if (existingUser) {
     return res.status(400).send("User already exists");
   }
 
-  // create new user
+  // Require extra fields for Donor and Volunteer
+  if (role === "Donor" || role === "Volunteer") {
+    if (!phone || !address || !pincode || !city || !state || !nationality || !dob) {
+      return res.status(400).send("All fields are required");
+    }
+  }
+
   const newUser = new User({
     name,
     email,
     password,
-    role
+    role,
+    phone,
+    address,
+    pincode,
+    city,
+    state,
+    nationality,
+    dob
   });
 
   await newUser.save();
+
   res.send("User registered successfully");
+
 });
 
 app.post("/login", async (req, res) => {

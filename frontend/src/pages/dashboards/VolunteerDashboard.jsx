@@ -63,6 +63,7 @@ useEffect(() => {
       console.error(err);
     }
   };
+  // eslint-disable-next-line
   const isRegistered = (event) => {
   return event.registeredUsers?.some(
     (u) => u.userId === volunteerId && u.role === "Volunteer"
