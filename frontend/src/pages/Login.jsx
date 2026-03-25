@@ -77,6 +77,14 @@ export default function Login() {
 >
   Login
 </button>
+<p className="text-right text-sm mt-2">
+  <span
+    className="text-green-600 cursor-pointer"
+    onClick={() => navigate("/forgot")}
+  >
+    Forgot Password?
+  </span>
+</p>
         <p className="text-center text-sm mt-4">
           Don’t have an account?{" "}
           <span

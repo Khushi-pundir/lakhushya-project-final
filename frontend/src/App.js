@@ -6,6 +6,7 @@ import DonorDashboard from "./pages/dashboards/DonorDashboard";
 import VolunteerDashboard from "./pages/dashboards/VolunteerDashboard";
 import NGODashboard from "./pages/dashboards/NGODashboard";
 import AdminDashboard from "./pages/dashboards/AdminDashboard";
+import ForgotPassword from "./pages/ForgotPassword";
 
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
         <Route path="/volunteer-dashboard" element={<VolunteerDashboard />} />
         <Route path="/ngo-dashboard" element={<NGODashboard />} />
         <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/forgot" element={<ForgotPassword />} />
       </Routes>
     </BrowserRouter>
   );
