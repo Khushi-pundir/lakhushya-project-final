@@ -4,7 +4,7 @@ const cors = require("cors");
 const User = require("./models/User");
 const Donation = require("./models/Donation");
 const Event = require("./models/Event");
-
+const Request = require("./models/Request");
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -33,6 +33,7 @@ app.post("/register", async (req, res) => {
     return res.status(403).send("Admin registration not allowed");
   }
 
+  // check if user already exists
   const existingUser = await User.findOne({ email });
 
   if (existingUser) {
@@ -157,6 +158,7 @@ app.get("/events", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+//get ngo events
 app.get("/events/ngo/:ngoId", async (req, res) => {
   try {
     const events = await Event.find({ ngoId: req.params.ngoId });
@@ -182,7 +184,7 @@ app.post("/events/register/:eventId", async (req, res) => {
     }
 
     const alreadyRegistered = event.registeredUsers.some(
-       u => u.userId === userId && u.role === role
+      u => u.userId === userId && u.role === role
     );
 
     if (alreadyRegistered) {
@@ -367,4 +369,133 @@ app.put("/events/update/:eventId", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+app.post("/request/create", async (req, res) => {
+  try {
+    const { ngoId, category, quantity, date, description } = req.body;
+
+    if (!ngoId || !category || !quantity || !date || !description) {
+      return res.status(400).json({ message: "All fields required" });
+    }
+
+    const saved = await Request.create({
+      ngoId,
+      category,
+      quantity,
+      date,
+      description,
+      status: "pending",
+      donorId: null,
+      pickupStatus: "pending",
+      acceptedAt: null
+    });
+
+    res.json({
+      message: "Request created successfully",
+      data: saved
+    });
+
+  } catch (err) {
+    console.error("REQUEST ERROR:", err);
+    res.status(500).json({
+      message: "Server error",
+      error: err.message
+    });
+  }
+});
+app.get("/request/all", async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+
+    
+
+    // update expired requests in DB
+await Request.updateMany(
+  {
+    status: { $ne: "accepted" },
+    date: { $lt: today }
+  },
+  {
+    $set: { status: "expired" }
+  }
+);
+
+// fetch updated requests
+const requests = await Request.find()
+  .populate("ngoId", "name") 
+  .populate("donorId", "name"); 
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching requests" });
+  }
+});
+app.post("/request/accept/:requestId", async (req, res) => {
+  try {
+    const { donorId, pickupDate } = req.body;
+
+    const request = await Request.findById(req.params.requestId);
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found" });
+    }
+
+    // ❌ already accepted
+    if (request.status === "accepted") {
+      return res.status(400).json({
+        message: "Already accepted"
+      });
+    }
+
+    // ❌ expired
+    const today = new Date().toISOString().split("T")[0];
+    if (request.date < today) {
+      return res.status(400).json({
+        message: "Request expired"
+      });
+    }
+
+    // ❌ invalid pickup date
+    if (pickupDate > request.date) {
+      return res.status(400).json({
+        message: "Pickup date must be before NGO date"
+      });
+    }
+
+    // ✅ update
+    request.status = "accepted";
+    request.donorId = donorId;
+    request.acceptedAt = new Date();
+
+    await request.save();
+
+    res.json({ message: "Accepted successfully" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+setInterval(async () => {
+  const twoDaysAgo = new Date();
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+  await Request.deleteMany({
+    status: "expired",
+    acceptedAt: { $lt: twoDaysAgo }
+  });
+
+  console.log("Old expired requests deleted");
+}, 1000 * 60 * 60); // every 1 hour
+app.post("/request/picked/:id", async (req, res) => {
+  await Request.findByIdAndUpdate(req.params.id, {
+    pickupStatus: "picked"
+  });
+  res.json({ message: "Marked as picked" });
+});
+
+app.post("/request/delivered/:id", async (req, res) => {
+  await Request.findByIdAndUpdate(req.params.id, {
+    pickupStatus: "delivered"
+  });
+  res.json({ message: "Marked as delivered" });
 });

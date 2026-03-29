@@ -55,6 +55,7 @@ export default function Login() {
 
       const data = JSON.parse(text);
       alert("Login successful");
+      localStorage.clear();
       localStorage.setItem("userId", data.userId);
       localStorage.setItem("role", data.role.toLowerCase());
 

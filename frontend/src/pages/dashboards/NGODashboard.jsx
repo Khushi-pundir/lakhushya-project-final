@@ -1,40 +1,131 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 export default function NgoDashboard() {
-    const [activeTab, setActiveTab] = useState("overview");
-    // eslint-disable-next-line no-unused-vars
-    const [donations, setDonations] = useState([]);
+  const [activeTab, setActiveTab] = useState("overview");
+  // eslint-disable-next-line no-unused-vars
+  const [donations, setDonations] = useState([]);
+  const [reqCategory, setReqCategory] = useState("");
+  const [reqQuantity, setReqQuantity] = useState("");
+  const [reqDate, setReqDate] = useState("");
+  const [reqDesc, setReqDesc] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [requests, setRequests] = useState([]);
+  const ngoId = localStorage.getItem("userId");
+  const navigate = useNavigate();
 
 
-    const ngoId = localStorage.getItem("userId");
-    const navigate = useNavigate();
-    const [title, setTitle] = useState("");
-    const [date, setDate] = useState("");
-    const [location, setLocation] = useState("");
-    const [description, setDescription] = useState("");
-    const [events, setEvents] = useState([]);
-    const [editingEventId, setEditingEventId] = useState(null);
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("role");
+    navigate("/login");
+  };
+  useEffect(() => {
+    fetch(`http://localhost:5000/ngo/donations/${ngoId}`)
+      .then(res => res.json())
+      .then(data => setDonations(data))
 
-    const handleLogout = () => {
-        localStorage.removeItem("userId");
-        localStorage.removeItem("role");
-        navigate("/login");
-    };
-    useEffect(() => {
-        fetch(`http://localhost:5000/ngo/donations/${ngoId}`)
-            .then(res => res.json())
-            .then(data => setDonations(data))
+      .catch(err => console.log(err));
+  }, [ngoId]);
+  useEffect(() => {
+    fetch("http://localhost:5000/request/all")
+      .then(res => res.json())
+      .then(data => setRequests(data))
+      .catch(err => console.log(err));
+  }, []);
+  const handleRequestSubmit = async (e) => {
+    e.preventDefault();
+    console.log({
+      reqCategory,
+      reqQuantity,
+      reqDate,
+      reqDesc
+    });
+    setError("");
+    setSuccess("");
+    if (!ngoId) {
+      setError("User not logged in");
+      return;
+    }
+    if (
+      !reqCategory ||
+      !reqQuantity ||
+      !reqDate ||
+      !reqDesc ||
+      reqDesc.trim() === ""
+    ) {
+      setError("All fields required");
+      return;
+    }
 
-            .catch(err => console.log(err));
-    }, [ngoId]);
-    useEffect(() => {
-        fetch(`http://localhost:5000/events/ngo/${ngoId}`)
-            .then(res => res.json())
-            .then(data => setEvents(data))
+    const quantityNum = Number(reqQuantity);
 
-            .catch(err => console.log(err));
-    }, [ngoId]);
-    
+    if (quantityNum <= 0) {
+      setError("Quantity must be greater than 0");
+      return;
+    }
+    if (quantityNum > 1000) {
+      setError("Please enter a realistic quantity");
+      return;
+    }
+    // Category-based validation
+    if (reqCategory !== "Food" && !Number.isInteger(quantityNum)) {
+      setError("Quantity must be a whole number for this category");
+      return;
+    }
+    const today = new Date().toISOString().split("T")[0];
+    if (reqDate < today) {
+      setError("Date cannot be in past");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("http://localhost:5000/request/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ngoId,
+          category: reqCategory,
+          quantity: Number(reqQuantity),
+          date: reqDate,
+          description: reqDesc,
+        }),
+      });
+
+      const text = await res.text();
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Server is not returning JSON. Check backend.");
+      }
+
+
+
+      if (!res.ok) throw new Error(data.message);
+
+      setSuccess("Request published!");
+const updated = await fetch("http://localhost:5000/request/all");
+const updatedData = await updated.json();
+setRequests(updatedData);
+      setReqCategory("");
+      setReqQuantity("");
+      setReqDate("");
+      setReqDesc("");
+
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="min-h-screen bg-[#FBF7F2]">
 
@@ -60,83 +151,145 @@ export default function NgoDashboard() {
           NGO Dashboard
         </h2>
         <p className="text-gray-600 mt-1">
-          Manage donations, events, and community impact
+          Manage donations and community impact
         </p>
       </div>
 
       {/* ===== TABS ===== */}
       <div className="px-10">
-  <div className="bg-[#F2EEE6] rounded-xl p-1">
-    <div className="grid grid-cols-6 gap-2 text-sm">
-      {[
-        "overview",
-        "manage donations",
-        "schedule pickups",
-        "manage events",
-        "raise requests",
-        "analytics",
-      ].map((tab) => (
-        <button
-          key={tab}
-          onClick={() => setActiveTab(tab)}
-          className={`py-2 rounded-lg capitalize transition ${
-            activeTab === tab
-              ? "bg-white text-green-700 font-semibold shadow"
-              : "text-gray-600 hover:bg-white"
-          }`}
-        >
-          {tab}
-        </button>
-      ))}
-    </div>
-  </div>
-</div>
+        <div className="bg-[#F2EEE6] rounded-xl p-1 flex gap-2 text-sm w-full overflow-x-auto md:overflow-visible no-scrollbar">
+          {[
+            "overview",
+            "manage donations",
+            "schedule pickups",
+            "raise requests",
+            "analytics",
+          ].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1 ${activeTab === tab
+                ? "bg-white text-green-700 font-semibold shadow"
+                : "text-gray-600 hover:bg-white"
+                }`}
+            >
+              {tab}
+            </button>
+          ))}
+
+        </div>
+      </div>
 
 
       {/* ===== OVERVIEW ===== */}
-{activeTab === "overview" && (
-  <div className="px-10 py-8">
+      {activeTab === "overview" && (
+        <div className="px-10 py-8">
 
-    {/* STATS */}
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      {[
-        { label: "Pending Donations", value: "12", icon: "⏳" },
-        { label: "People Served", value: "1,240", icon: "❤️" },
-        { label: "Active Events", value: "4", icon: "🎉" },
-        { label: "This Month", value: "320", icon: "📊" },
-      ].map((item, i) => (
-        <div
-          key={i}
-          className="bg-white p-6 rounded-xl shadow-sm flex justify-between items-center"
-        >
-          <div>
-            <p className="text-gray-500 text-sm">{item.label}</p>
-            <h3 className="text-3xl font-bold text-green-600 mt-2">
-              {item.value}
-            </h3>
+          {/* STATS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { label: "Pending Donations", value: "12", icon: "⏳" },
+              { label: "People Served", value: "1,240", icon: "❤️" },
+              { label: "This Month", value: "320", icon: "📊" },
+            ].map((item, i) => (
+              <div
+                key={i}
+                className="bg-white p-6 rounded-xl shadow-sm flex justify-between items-center"
+              >
+                <div>
+                  <p className="text-gray-500 text-sm">{item.label}</p>
+                  <h3 className="text-3xl font-bold text-green-600 mt-2">
+                    {item.value}
+                  </h3>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-2xl">
+                  {item.icon}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-2xl">
-            {item.icon}
+
+          {/* RECENT DONATIONS & PICKUPS */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
+
+            {/* RECENT DONATIONS */}
+            <div className="bg-white p-6 rounded-xl border">
+              <h3 className="font-semibold mb-4">Recent Donations</h3>
+
+              <div className="space-y-3">
+                {donations.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No donations</p>
+                ) : (
+                  donations.map((donation) => (
+                    <div
+                      key={donation._id}
+                      className="bg-white p-4 rounded-xl border flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="font-medium">{donation.itemName}</p>
+                        <p className="text-xs text-gray-500">
+                          Qty: {donation.quantity} · {donation.donorId?.name}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`text-xs px-4 py-1 rounded-full ${donation.status === "pending_ngo"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : donation.status === "ngo_approved"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                          }`}
+                      >
+                        {donation.status.replace("_", " ")}
+                      </span>
+
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* TODAY’S PICKUPS */}
+            <div className="bg-white p-6 rounded-xl border">
+              <h3 className="font-semibold mb-4">Today’s Pickups</h3>
+
+              <div className="space-y-3">
+                <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">Food Donation</p>
+                    <p className="text-xs text-gray-500">10:00 AM · Delhi</p>
+                  </div>
+                  <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                    Confirmed
+                  </span>
+                </div>
+
+                <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium">Clothes</p>
+                    <p className="text-xs text-gray-500">1:00 PM · Jaipur</p>
+                  </div>
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
+                    Pending
+                  </span>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
-      ))}
-    </div>
+      )}
 
-    {/* RECENT DONATIONS & PICKUPS */}
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
-
-      {/* RECENT DONATIONS */}
-      <div className="bg-white p-6 rounded-xl border">
-        <h3 className="font-semibold mb-4">Recent Donations</h3>
-
-        <div className="space-y-3">
+      {/* ===== MANAGE DONATIONS ===== */}
+      {activeTab === "manage donations" && (
+        <div className="px-10 py-8 space-y-4">
           {donations.length === 0 ? (
             <p className="text-gray-500 text-sm">No donations</p>
           ) : (
             donations.map((donation) => (
               <div
                 key={donation._id}
-                className="bg-white p-4 rounded-xl border flex justify-between items-center"
+                className="bg-white p-6 rounded-xl border flex justify-between items-center"
               >
                 <div>
                   <p className="font-medium">{donation.itemName}</p>
@@ -145,276 +298,58 @@ export default function NgoDashboard() {
                   </p>
                 </div>
 
-                <span
-  className={`text-xs px-4 py-1 rounded-full ${
-    donation.status === "pending_ngo"
-      ? "bg-yellow-100 text-yellow-700"
-      : donation.status === "ngo_approved"
-      ? "bg-green-100 text-green-700"
-      : "bg-red-100 text-red-700"
-  }`}
->
-  {donation.status.replace("_", " ")}
-</span>
+                {/* RIGHT SIDE */}
+                <div className="flex gap-3 items-center">
+                  {/* PENDING NGO */}
+                  {donation.status === "pending_ngo" && (
+                    <>
+                      <button
+                        className="border px-4 py-1 rounded-lg text-sm"
+                        onClick={() =>
+                          fetch(`http://localhost:5000/ngo/decline/${donation._id}`, {
+                            method: "POST",
+                          }).then(() => window.location.reload())
+                        }
+                      >
+                        Decline
+                      </button>
 
+                      <button
+                        className="bg-green-500 text-white px-4 py-1 rounded-lg text-sm"
+                        onClick={() =>
+                          fetch(`http://localhost:5000/ngo/accept/${donation._id}`, {
+                            method: "POST",
+                          }).then(() => window.location.reload())
+                        }
+                      >
+                        Accept
+                      </button>
+                    </>
+                  )}
+
+                  {/* NGO APPROVED */}
+                  {donation.status === "ngo_approved" && (
+                    <span className="text-xs bg-green-100 text-green-700 px-4 py-1 rounded-full">
+                      Accepted
+                    </span>
+                  )}
+
+                  {/* NGO DECLINED */}
+                  {donation.status === "ngo_declined" && (
+                    <span className="text-xs bg-red-100 text-red-700 px-4 py-1 rounded-full">
+                      Declined
+                    </span>
+                  )}
+                </div>
               </div>
             ))
           )}
         </div>
-      </div>
-
-      {/* TODAY’S PICKUPS */}
-      <div className="bg-white p-6 rounded-xl border">
-        <h3 className="font-semibold mb-4">Today’s Pickups</h3>
-
-        <div className="space-y-3">
-          <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">Food Donation</p>
-              <p className="text-xs text-gray-500">10:00 AM · Delhi</p>
-            </div>
-            <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">
-              Confirmed
-            </span>
-          </div>
-
-          <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
-            <div>
-              <p className="text-sm font-medium">Clothes</p>
-              <p className="text-xs text-gray-500">1:00 PM · Jaipur</p>
-            </div>
-            <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
-              Pending
-            </span>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-)}
-
-      {/* ===== MANAGE DONATIONS ===== */}
-{activeTab === "manage donations" && (
-  <div className="px-10 py-8 space-y-4">
-    {donations.length === 0 ? (
-      <p className="text-gray-500 text-sm">No donations</p>
-    ) : (
-      donations.map((donation) => (
-        <div
-          key={donation._id}
-          className="bg-white p-6 rounded-xl border flex justify-between items-center"
-        >
-          <div>
-            <p className="font-medium">{donation.itemName}</p>
-            <p className="text-xs text-gray-500">
-              Qty: {donation.quantity} · {donation.donorId?.name}
-            </p>
-          </div>
-
-          {/* RIGHT SIDE */}
-          <div className="flex gap-3 items-center">
-            {/* PENDING NGO */}
-            {donation.status === "pending_ngo" && (
-              <>
-                <button
-                  className="border px-4 py-1 rounded-lg text-sm"
-                  onClick={() =>
-                    fetch(`http://localhost:5000/ngo/decline/${donation._id}`, {
-                      method: "POST",
-                    }).then(() => window.location.reload())
-                  }
-                >
-                  Decline
-                </button>
-
-                <button
-                  className="bg-green-500 text-white px-4 py-1 rounded-lg text-sm"
-                  onClick={() =>
-                    fetch(`http://localhost:5000/ngo/accept/${donation._id}`, {
-                      method: "POST",
-                    }).then(() => window.location.reload())
-                  }
-                >
-                  Accept
-                </button>
-              </>
-            )}
-
-            {/* NGO APPROVED */}
-            {donation.status === "ngo_approved" && (
-              <span className="text-xs bg-green-100 text-green-700 px-4 py-1 rounded-full">
-                Accepted
-              </span>
-            )}
-
-            {/* NGO DECLINED */}
-            {donation.status === "ngo_declined" && (
-              <span className="text-xs bg-red-100 text-red-700 px-4 py-1 rounded-full">
-                Declined
-              </span>
-            )}
-          </div>
-        </div>
-      ))
-    )}
-  </div>
-)}
-
-
-      {/* ===== MANAGE EVENTS ===== */}
-      {activeTab === "manage events" && (
-        <div className="px-10 py-8 max-w-3xl">
-          <div className="bg-white p-6 rounded-xl border">
-            <h3 className="font-semibold mb-4">Create New Event</h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input
-                className="border p-3 rounded-lg"
-                placeholder="Event Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-              <input
-                type="date"
-                className="border p-3 rounded-lg"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
-              <input
-                className="border p-3 rounded-lg"
-                placeholder="Location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
-              <textarea
-                className="border p-3 rounded-lg md:col-span-2"
-                placeholder="Event Description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-
-
-            </div>
-
-            <button
-  type="button"
-  className="mt-4 bg-green-500 text-white px-6 py-2 rounded-lg"
-  onClick={() => {
-    if (!title || !date || !location || !description) {
-      alert("Please fill all fields");
-      return;
-    }
-
-    fetch(
-  editingEventId
-    ? `http://localhost:5000/events/update/${editingEventId}`
-    : "http://localhost:5000/events/create",
-  {
-    method: editingEventId ? "PUT" : "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      ngoId,
-      title,
-      date,
-      location,
-      description
-    })
-  }
-)
-  .then(res => res.json())
-  .then(data => {
-    alert(data.message);
-    setTitle("");
-    setDate("");
-    setLocation("");
-    setDescription("");
-    setEditingEventId(null);
-    fetch(`http://localhost:5000/events/ngo/${ngoId}`)
-    .then(res => res.json())
-    .then(data => setEvents(data));
-  });
-
-  }}
->
-  Create Event
-</button>
- {/* ===== EXISTING EVENTS ===== */}
-<div className="mt-8">
-  <h3 className="font-semibold mb-4">Your Events</h3>
-
-  {events.length === 0 ? (
-    <p className="text-sm text-gray-500">No events created yet</p>
-  ) : (
-    events.map(event => (
-      <div
-        key={event._id}
-        className="bg-[#F9F7F3] p-5 rounded-lg mb-4"
-      >
-        <p className="font-semibold">{event.title}</p>
-        <p className="text-xs text-gray-500">📍 {event.location}</p>
-        <p className="text-xs text-gray-500">📅 {event.date}</p>
-        <p className="text-sm mt-2">{event.description}</p>
-        <p className="text-xs text-gray-500">
-            Status: <b>{event.status}</b>
-        </p>
-        {/* REGISTERED USERS */}
-        <div className="mt-3">
-          <p className="text-xs font-medium mb-1">Registered Users</p>
-
-          {event.registeredUsers?.length === 0 ? (
-            <p className="text-xs text-gray-400">No registrations yet</p>
-          ) : (
-            event.registeredUsers.map((u, i) => (
-              <p key={i} className="text-xs text-gray-600">
-                • {u.role} (User ID: {u.userId})
-              </p>
-
-            ))
-          )}
-        </div>
-
-        {/* ACTION BUTTONS */}
-        <div className="flex gap-3 mt-4">
-          <button
-            className="border px-4 py-1 rounded-lg text-sm"
-            onClick={() => {
-                setEditingEventId(event._id);
-                setTitle(event.title);
-                setDate(event.date);
-                setLocation(event.location);
-                setDescription(event.description);
-            }}
-            >
-            Edit
-            </button>
-
-
-          <button
-            className="bg-red-500 text-white px-4 py-1 rounded-lg text-sm"
-            onClick={() => {
-              fetch(`http://localhost:5000/events/${event._id}`, {
-                method: "DELETE"
-              })
-                .then(res => res.json())
-                .then(() => {
-                  alert("Event cancelled");
-                  setEvents(events.filter(e => e._id !== event._id));
-                });
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    ))
-  )}
-</div>
-
-          </div>
-        </div>
       )}
-       
+
+
+
+
 
       {/* ===== RAISE REQUESTS ===== */}
       {activeTab === "raise requests" && (
@@ -422,23 +357,86 @@ export default function NgoDashboard() {
           <div className="bg-white p-6 rounded-xl border">
             <h3 className="font-semibold mb-4">Raise Donation Request</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select className="border p-3 rounded-lg">
-                <option>Food</option>
-                <option>Clothes</option>
-                <option>Books</option>
+            <form
+              onSubmit={handleRequestSubmit}
+              className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            >
+
+              <select
+                value={reqCategory || ""}
+                onChange={(e) => {
+                  console.log("Selected:", e.target.value); // DEBUG
+                  setReqCategory(e.target.value);
+                }}
+                className="border p-3 rounded-lg"
+              >
+                <option value="">Select Category</option>
+                <option value="Food">Food</option>
+                <option value="Clothes">Clothes</option>
+                <option value="Books">Books</option>
               </select>
-              <input className="border p-3 rounded-lg" placeholder="Required Quantity" />
-              <input type="date" className="border p-3 rounded-lg" />
-              <textarea
-                className="border p-3 rounded-lg md:col-span-2"
-                placeholder="Description"
+
+              <input
+                type="number"
+                step={reqCategory === "Food" ? "0.1" : "1"}
+                placeholder={reqCategory === "Food" ? "Quantity (kg)" : "Quantity (units)"}
+
+                value={reqQuantity}
+                onChange={(e) => setReqQuantity(e.target.value)}
+                className="border p-3 rounded-lg"
               />
+
+              <input
+                type="date"
+                value={reqDate}
+                onChange={(e) => {
+                  console.log("DATE SELECTED:", e.target.value); // DEBUG
+                  setReqDate(e.target.value);
+                }}
+                className="border p-3 rounded-lg"
+              />
+
+              <textarea
+                placeholder="Description"
+                value={reqDesc}
+                onChange={(e) => setReqDesc(e.target.value)}
+                onBlur={() => setReqDesc(reqDesc.trim())}
+                className="border p-3 rounded-lg md:col-span-2"
+              />
+
+              {error && <p className="text-red-500">{error}</p>}
+              {success && <p className="text-green-600">{success}</p>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-green-500 text-white px-6 py-2 rounded-lg md:col-span-2"
+              >
+                {loading ? "Submitting..." : "Publish Request"}
+              </button>
+
+            </form>
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Your Requests</h4>
+
+              {requests
+                .filter(req => req.ngoId?._id === ngoId)
+                .map((req) => (
+                  <div key={req._id} className="border p-3 mb-2 rounded">
+                    <p>Category: {req.category}</p>
+                    <p>Quantity: {req.quantity}</p>
+                    <p>Status: {req.status}</p>
+
+                    {req.status === "accepted" && (
+                      <>
+                        <p>Accepted by: {req.donorId?.name}</p>
+                        <p>Pickup Status: {req.pickupStatus}</p>
+                      </>
+                    )}
+                  </div>
+                ))}
             </div>
 
-            <button className="mt-4 bg-green-500 text-white px-6 py-2 rounded-lg">
-              Publish Request
-            </button>
           </div>
         </div>
       )}

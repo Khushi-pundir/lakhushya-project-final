@@ -1,46 +1,33 @@
-import { useEffect, useState ,useCallback} from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 export default function VolunteerDashboard() {
   const [activeTab, setActiveTab] = useState("events");
   const [pickups, setPickups] = useState([]);
-  const [events, setEvents] = useState([]);
   // TEMP – replace later with logged-in volunteer ID
   const volunteerId = localStorage.getItem("userId");
   const navigate = useNavigate();
-  
-    const handleLogout = () => {
-      localStorage.removeItem("userId");
-      localStorage.removeItem("role");
-      navigate("/login");
-    };
-const fetchPickups = useCallback(async () => {
-  try {
-    const res = await axios.get(
-      `http://localhost:5000/volunteer/pickups/${volunteerId}`
-    );
-    setPickups(res.data);
-  } catch (err) {
-    console.error(err);
-  }
-}, [volunteerId]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("role");
+    navigate("/login");
+  };
+  const fetchPickups = useCallback(async () => {
+    try {
+      const res = await axios.get(
+        `http://localhost:5000/volunteer/pickups/${volunteerId}`
+      );
+      setPickups(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [volunteerId]);
   useEffect(() => {
     fetchPickups();
   }, [fetchPickups]);  //THIS LINE CONFLICTED
 
 
-const fetchEvents = async () => {
-  try {
-    const res = await fetch("http://localhost:5000/events");
-    const data = await res.json();
-    setEvents(data);
-  } catch (err) {
-    console.error(err);
-  }
-};
-useEffect(() => {
-  fetchEvents();
-}, []);
   const acceptPickup = async (id) => {
     try {
       await axios.post(
@@ -64,11 +51,7 @@ useEffect(() => {
     }
   };
   // eslint-disable-next-line
-  const isRegistered = (event) => {
-  return event.registeredUsers?.some(
-    (u) => u.userId === volunteerId && u.role === "Volunteer"
-  );
-};
+
   return (
     <div className="min-h-screen bg-[#FBF7F2]">
 
@@ -99,11 +82,10 @@ useEffect(() => {
 
       {/* TABS */}
       <div className="px-10">
-        <div className="bg-[#F2EEE6] rounded-xl p-1 text-sm w-full flex md:grid md:grid-cols-6 overflow-x-auto md:overflow-visible no-scrollbar">
+        <div className="bg-[#F2EEE6] rounded-xl p-1 flex gap-2 text-sm w-full overflow-x-auto md:overflow-visible no-scrollbar">
           {[
             "overview",
             "manage pickups",
-            "events",
             "analytics",
             "certificates",
             "feedback",
@@ -111,11 +93,10 @@ useEffect(() => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap w-full ${
-                activeTab === tab
+              className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1 ${activeTab === tab
                   ? "bg-white text-green-700 font-semibold shadow"
                   : "text-gray-600 hover:bg-white"
-              }`}
+                }`}
             >
               {tab}
             </button>
@@ -128,7 +109,6 @@ useEffect(() => {
         <div className="px-10 py-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <Stat title="Total Pickups" value={pickups.length} icon="🚚" />
-            <Stat title="Events Joined" value="15" icon="🎉" />
             <Stat title="Volunteer Points" value="1450" icon="⭐" />
             <Stat title="Active Tasks" value={pickups.filter(p => p.status === "pending").length} icon="📋" />
           </div>
@@ -151,14 +131,7 @@ useEffect(() => {
               ))}
             </Box>
 
-            <Box title="Available Events">
-              <Event
-                title="Community Food Drive"
-                date="2024-02-15 · 10:00 AM"
-                location="Central Park, Delhi"
-                action="Register"
-              />
-            </Box>
+
           </div>
         </div>
       )}
@@ -187,79 +160,7 @@ useEffect(() => {
           </Box>
         </div>
       )}
-      {activeTab === "events" && (
-  <div className="px-10 py-8">
 
-    <h3 className="text-xl font-semibold text-green-900 mb-1">
-      Events
-    </h3>
-    <p className="text-gray-600 mb-6">
-      Participate in upcoming community initiatives
-    </p>
-
-    <div className="space-y-6">
-
-    {events.map(event => {
-  const isRegistered = event.registeredUsers?.some(
-    u => u.userId === volunteerId
-  );
-
-  return (
-    <div key={event._id} className="bg-white p-6 rounded-xl border mb-4">
-      <p className="font-semibold text-lg">{event.title}</p>
-
-      <p className="text-sm text-gray-500">
-        🏢 NGO: {event.ngoId?.name || "Unknown NGO"}
-      </p>
-
-      <p className="text-sm text-gray-500">📍 {event.location}</p>
-      <p className="text-sm text-gray-500">📅 {event.date}</p>
-
-      <p className="text-sm mt-2">{event.description}</p>
-
-      <p className="text-xs mt-2 text-gray-500">
-        Status: <b>{event.status}</b>
-      </p>
-
-      {isRegistered ? (
-        <button
-          disabled
-          className="mt-3 bg-gray-300 text-gray-600 px-4 py-1 rounded-lg text-sm cursor-not-allowed"
-        >
-          Registered
-        </button>
-      ) : (
-        <button
-          className="mt-3 bg-green-500 text-white px-4 py-1 rounded-lg text-sm"
-          onClick={() => {
-            fetch(`http://localhost:5000/events/register/${event._id}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: volunteerId,
-                role: "Volunteer"
-              })
-            })
-              .then(res => res.json())
-              .then(data => {
-                alert(data.message);
-                fetchEvents();
-              });
-          }}
-        >
-          Register
-        </button>
-      )}
-    </div>
-  );
-})}
-
-
-
-    </div>
-
-  </div>
-)}
     </div>
   );
 }
@@ -332,15 +233,4 @@ const PickupManage = ({
   </div>
 );
 
-const Event = ({ title, date, location, action }) => (
-  <div className="bg-[#F9F7F3] p-4 rounded-lg flex justify-between items-center">
-    <div>
-      <p className="font-medium text-sm">{title}</p>
-      <p className="text-xs text-gray-500">{date}</p>
-      <p className="text-xs text-gray-500">{location}</p>
-    </div>
-    <button className="text-xs bg-green-500 text-white px-4 py-1.5 rounded-lg">
-      {action}
-    </button>
-  </div>
-);
+
