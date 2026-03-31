@@ -33,6 +33,7 @@ export default function ForgotPassword() {
     try {
       const res = await axios.post("http://localhost:5000/send-otp", {
         email,
+        type: "forgot"
       });
 
       alert(res.data.message);

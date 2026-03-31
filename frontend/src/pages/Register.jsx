@@ -31,13 +31,25 @@ export default function Register() {
   const [country, setCountry] = useState("");
 
   const sendOTP = async () => {
+    if (!email) {
+      alert("Please enter email first");
+      return;
+    }
+
     try {
-      await axios.post("http://localhost:5000/send-otp", { email });
-      alert("OTP sent successfully");
+      const res = await axios.post("http://localhost:5000/send-otp", {
+        email,
+        type: "register"
+      });
+
+      alert(res.data.message || "OTP sent successfully");
+
       setOtpSent(true);
       setTimer(30);
       setCanResend(false);
+
     } catch (err) {
+      // 🔥 THIS LINE SHOWS ERROR IMMEDIATELY
       alert(err.response?.data?.message || "Error sending OTP");
     }
   };

@@ -66,7 +66,7 @@ app.post("/register", async (req, res) => {
   const existingUser = await User.findOne({ email: cleanEmail });
 
   if (existingUser) {
-    return res.status(400).send("User not found");
+    return res.status(400).send("User already exists");
   }
 
   // Require extra fields for Donor and Volunteer
@@ -127,10 +127,24 @@ app.post("/send-otp", async (req, res) => {
     // 🔥 CHECK IF EMAIL EXISTS (ANY ROLE)
     const existingUser = await User.findOne({ email: cleanEmail });
 
-    if (!existingUser) {
-      return res.status(404).json({
-        message: "User not found"
-      });
+    const { type } = req.body;
+
+    // 👉 REGISTER FLOW
+    if (type === "register") {
+      if (existingUser) {
+        return res.status(400).json({
+          message: "User already exists"
+        });
+      }
+    }
+
+    // 👉 FORGOT PASSWORD FLOW
+    if (type === "forgot") {
+      if (!existingUser) {
+        return res.status(404).json({
+          message: "User not found"
+        });
+      }
     }
 
     // ✅ generate OTP
