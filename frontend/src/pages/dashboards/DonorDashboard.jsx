@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function DonorDashboard() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem("activeTab") || "overview"
+  );
   const [donations, setDonations] = useState([]);
   const donorId = localStorage.getItem("userId");
   const navigate = useNavigate();
@@ -197,7 +199,7 @@ export default function DonorDashboard() {
         localStorage.removeItem("currentRequestId");
         localStorage.removeItem("requestDate");
       }
-      setActiveTab("view requests");
+
       // ✅ Reset fields safely
       setItemName("");
       setCategory("");
@@ -258,7 +260,10 @@ export default function DonorDashboard() {
           ].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                localStorage.setItem("activeTab", tab);
+              }}
               className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1  ${activeTab === tab
                 ? "bg-white text-green-700 font-semibold shadow"
                 : "text-gray-600 hover:bg-white"
@@ -625,13 +630,13 @@ export default function DonorDashboard() {
                   </button>
                 )}
 
-                {req.status === "accepted" && req.donorId?._id !== donorId && (
+                {req.status === "accepted" && String(req.donorId?._id) !== String(donorId) && (
                   <span className="text-red-500 font-semibold">
                     Accepted by another donor
                   </span>
                 )}
 
-                {req.status === "accepted" && req.donorId?._id === donorId && (
+                {req.status === "accepted" && String(req.donorId?._id) === String(donorId) && (
                   <span className="text-green-600 font-semibold">
                     Accepted by you
                   </span>

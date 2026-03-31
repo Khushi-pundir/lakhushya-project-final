@@ -1,283 +1,243 @@
 import { useNavigate } from "react-router-dom";
-import { useState , useEffect } from "react";
-import { auth } from "../firebase";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { useState, useEffect } from "react";
+import axios from "axios";
 
 export default function Register() {
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("");
-
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [nationality, setNationality] = useState("");
-  const [dob, setDob] = useState("");
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [timer, setTimer] = useState(0);
-const [canResend, setCanResend] = useState(true);
+  const [timer, setTimer] = useState(30);
+  const [canResend, setCanResend] = useState(false);
 
-  const sendOTP = () => {
+  const [role, setRole] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const appVerifier = window.recaptchaVerifier;
+  const [phoneCode, setPhoneCode] = useState("+91");
+  const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
+  const [aadhaar, setAadhaar] = useState("");
 
-  signInWithPhoneNumber(auth, "+91" + phone, appVerifier)
-    .then((confirmationResult) => {
+  // ✅ NEW MANUAL ADDRESS FIELDS
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [stateVal, setStateVal] = useState("");
+  const [country, setCountry] = useState("");
 
-      window.confirmationResult = confirmationResult;
-      setOtpSent(true);
-
+  const sendOTP = async () => {
+    try {
+      await axios.post("http://localhost:5000/send-otp", { email });
       alert("OTP sent successfully");
+      setOtpSent(true);
+      setTimer(30);
       setCanResend(false);
-setTimer(30);
-
-    })
-    .catch((error) => {
-      console.log(error);
-      alert(error.message);
-    });
-
-};
-  const verifyOTP = () => {
-
-    window.confirmationResult.confirm(otp.join(""))
-      .then(() => {
-        alert("Phone verified successfully");
-        setOtpVerified(true);
-      })
-      .catch(() => {
-        alert("Invalid OTP");
-      });
+    } catch (err) {
+      alert(err.response?.data?.message || "Error sending OTP");
+    }
   };
 
-const handleOtpChange = (value, index) => {
+  const verifyOTP = () => {
+    if (otp.join("").length !== 6) return alert("Enter complete OTP");
+    setOtpVerified(true);
+  };
 
-  if (isNaN(value)) return;
+  const handleOtpChange = (val, i) => {
+    if (isNaN(val)) return;
 
-  const newOtp = [...otp];
-  newOtp[index] = value;
-  setOtp(newOtp);
+    let newOtp = [...otp];
+    newOtp[i] = val;
+    setOtp(newOtp);
 
-  if (value && index < 5) {
-    document.getElementById(`otp-${index + 1}`).focus();
-  }
+    if (val && i < 5) {
+      document.getElementById(`otp-${i + 1}`).focus();
+    }
+  };
 
-};
-useEffect(() => {
+  const handleKeyDown = (e, i) => {
+    if (e.key === "Backspace" && !otp[i] && i > 0) {
+      document.getElementById(`otp-${i - 1}`).focus();
+    }
+  };
 
-  if (timer > 0) {
-    const interval = setInterval(() => {
-      setTimer((prev) => prev - 1);
-    }, 1000);
+  useEffect(() => {
+    if (otpSent && !otpVerified && timer > 0) {
+      const interval = setInterval(() => {
+        setTimer((p) => p - 1);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+    if (timer === 0) setCanResend(true);
+  }, [timer, otpSent, otpVerified]);
 
-    return () => clearInterval(interval);
-  }
+  const validatePassword = (p) =>
+    /^(?=.*[A-Z])(?=.*\d)[^\s]{8,}$/.test(p);
 
-  if (timer === 0) {
-    setCanResend(true);
-  }
+  const isAbove18 = (dob) =>
+    new Date().getFullYear() - new Date(dob).getFullYear() >= 18;
 
-}, [timer]);
-useEffect(() => {
-  if (!window.recaptchaVerifier) {
-    window.recaptchaVerifier = new RecaptchaVerifier(
-      auth,
-      "recaptcha-container",
-      { size: "invisible" }
-    );
-  }
-}, []);
   return (
+    <div className="min-h-screen flex justify-center items-center bg-[#FBF7F2]">
+      <div className="bg-white p-8 rounded-xl w-[420px]">
 
-    <div className="min-h-screen bg-[#FBF7F2] flex items-center justify-center">
-
-      <div className="bg-white p-8 rounded-2xl shadow-md w-[420px] animate-fade-in">
-
-        <h2 className="text-2xl font-bold text-green-700 text-center">
+        <h2 className="text-xl font-bold text-center text-green-700">
           Create Account 🌱
         </h2>
 
-        <p className="text-gray-500 text-center mt-1">
-          Join Lakhushiya and start making a difference
-        </p>
-
         <input
-          className="w-full border p-3 rounded-lg mt-6"
           placeholder="Full Name"
-          value={name}
+          className="w-full mt-4 p-3 border"
+          disabled={otpVerified}
           onChange={(e) => setName(e.target.value)}
         />
 
         <input
-          className="w-full border p-3 rounded-lg mt-4"
           placeholder="Email"
-          value={email}
+          className="w-full mt-4 p-3 border"
+          disabled={otpVerified}
           onChange={(e) => setEmail(e.target.value)}
         />
 
-        <select
-          className="w-full border p-3 rounded-lg mt-4 focus:outline-green-500"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        >
-          <option value="">Select Role</option>
-          <option>Donor</option>
-          <option>Volunteer</option>
-          <option>NGO</option>
-        </select>
+        {!otpVerified && (
+          <button
+            className="w-full bg-green-500 text-white mt-4 p-2"
+            onClick={sendOTP}
+            disabled={!canResend && otpSent}
+          >
+            {canResend || !otpSent ? "Send OTP" : `Resend in ${timer}s`}
+          </button>
+        )}
 
-        {(role === "Donor" || role === "Volunteer") && (
+        {otpSent && !otpVerified && (
           <>
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="Phone Number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
+            <div className="flex gap-2 mt-4">
+              {otp.map((d, i) => (
+                <input
+                  key={i}
+                  id={`otp-${i}`}
+                  maxLength="1"
+                  className="w-10 h-10 border text-center"
+                  value={d}
+                  onChange={(e) => handleOtpChange(e.target.value, i)}
+                  onKeyDown={(e) => handleKeyDown(e, i)}
+                />
+              ))}
+            </div>
 
-            <button
-  type="button"
-  className="w-full bg-blue-500 text-white py-2 rounded-lg mt-2 disabled:bg-gray-400"
-  onClick={sendOTP}
-  disabled={!canResend}
->
-  {canResend ? "Send OTP" : `Resend in ${timer}s`}
-</button>
-            {otpSent && (
-  <>
-    <div className="flex justify-between mt-4">
-  {otp.map((data, index) => (
-    <input
-      key={index}
-      id={`otp-${index}`}
-      type="text"
-      maxLength="1"
-      value={data}
-      onChange={(e) => handleOtpChange(e.target.value, index)}
-      className="w-10 h-10 border rounded text-center text-lg"
-    />
-  ))}
-</div>
-
-    <button
-      type="button"
-      className="w-full bg-green-600 text-white py-2 rounded-lg mt-2"
-      onClick={verifyOTP}
-    >
-      Verify OTP
-    </button>
-  </>
-)}
-
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="Address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="Pincode"
-              value={pincode}
-              onChange={(e) => setPincode(e.target.value)}
-            />
-
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="City"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
-
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="State"
-              value={state}
-              onChange={(e) => setState(e.target.value)}
-            />
-
-            <input
-              className="w-full border p-3 rounded-lg mt-4"
-              placeholder="Nationality"
-              value={nationality}
-              onChange={(e) => setNationality(e.target.value)}
-            />
-
-            <input
-              type="date"
-              className="w-full border p-3 rounded-lg mt-4"
-              value={dob}
-              onChange={(e) => setDob(e.target.value)}
-            />
+            <button className="w-full bg-green-600 mt-3 text-white p-2" onClick={verifyOTP}>
+              Verify OTP
+            </button>
           </>
         )}
 
-        <input
-          type="password"
-          className="w-full border p-3 rounded-lg mt-4"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        {otpVerified && (
+          <>
+            <select className="w-full mt-4 p-3 border" onChange={(e) => setRole(e.target.value)}>
+              <option value="">Select Role</option>
+              <option>Donor</option>
+              <option>Volunteer</option>
+              <option>NGO</option>
+            </select>
 
-        <input
-          type="password"
-          className="w-full border p-3 rounded-lg mt-4 focus:outline-green-500"
-          placeholder="Confirm Password"
-        />
+            {/* PHONE */}
+            <div className="flex mt-4">
+              <select className="w-1/3 border p-3" onChange={(e) => setPhoneCode(e.target.value)}>
+                <option>🇮🇳 +91</option>
+                <option>🇺🇸 +1</option>
+              </select>
+              <input className="w-2/3 border p-3" placeholder="Phone Number" onChange={(e) => setPhone(e.target.value)} />
+            </div>
 
-        <button
-          className="w-full bg-green-500 text-white py-3 rounded-lg mt-6 font-semibold"
-          onClick={() => {
-            if ((role === "Donor" || role === "Volunteer") && !otpVerified) {
-    alert("Please verify OTP first");
-    return;
-  }
+            {/* ADDRESS SECTION */}
+            <input placeholder="Address" className="w-full mt-4 p-3 border" onChange={(e) => setAddress(e.target.value)} />
+            <input placeholder="City" className="w-full mt-4 p-3 border" onChange={(e) => setCity(e.target.value)} />
+            <input placeholder="Pincode" className="w-full mt-4 p-3 border" onChange={(e) => setPincode(e.target.value)} />
+            <input placeholder="State" className="w-full mt-4 p-3 border" onChange={(e) => setStateVal(e.target.value)} />
+            <input placeholder="Country" className="w-full mt-4 p-3 border" onChange={(e) => setCountry(e.target.value)} />
 
-            fetch("http://localhost:5000/register", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name,
-                email,
-                password,
-                role,
-                phone,
-                address,
-                pincode,
-                city,
-                state,
-                nationality,
-                dob
-              })
-            })
-              .then(res => res.text())
-              .then(data => {
-                alert(data);
-                navigate("/login");
-              });
-          }}
-        >
-          Register
-        </button>
+            {/* DOB */}
+            <label className="mt-4 block text-sm text-gray-600">
+              Date of Birth
+            </label>
+            <input type="date" className="w-full p-3 border" onChange={(e) => setDob(e.target.value)} />
 
-        <p
-          onClick={() => navigate("/login")}
-          className="text-sm text-green-600 mt-4 cursor-pointer text-center"
-        >
-          Already have an account? Login
-        </p>
-{/* recaptcha container (required for Firebase OTP) */}
-        <div id="recaptcha-container"></div>
+            {(role === "Donor" || role === "Volunteer") && (
+              <input placeholder="Aadhaar Number" className="w-full mt-4 p-3 border" onChange={(e) => setAadhaar(e.target.value)} />
+            )}
+
+            <input type="password" placeholder="Password" className="w-full mt-4 p-3 border" onChange={(e) => setPassword(e.target.value)} />
+            <input type="password" placeholder="Confirm Password" className="w-full mt-4 p-3 border" onChange={(e) => setConfirmPassword(e.target.value)} />
+
+            <button
+              className="w-full bg-green-500 mt-4 text-white p-3"
+              onClick={async () => {
+                const nameRegex = /^[A-Za-z\s]+$/;
+
+                if (!nameRegex.test(name)) {
+                  alert("Name should contain only letters and spaces");
+                  return;
+                }
+
+                if (!name || !email || !role || !phone || !address || !city || !pincode || !stateVal || !country || !dob || !password)
+                  return alert("All fields are required");
+
+                if (!validatePassword(password))
+                  return alert("Password must be 8+ chars, 1 uppercase, 1 digit, no spaces");
+
+                if (password !== confirmPassword)
+                  return alert("Passwords do not match");
+
+                if (!isAbove18(dob))
+                  return alert("Must be above 18");
+
+                if ((role === "Donor" || role === "Volunteer") && !/^\d{12}$/.test(aadhaar))
+                  return alert("Invalid Aadhaar");
+
+                try {
+                  const res = await fetch("http://localhost:5000/register", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                      name,
+                      email,
+                      password,
+                      role,
+                      phone,
+                      address,
+                      pincode,
+                      city,
+                      state: stateVal,
+                      nationality: country,
+                      dob
+                    })
+                  });
+
+                  const text = await res.text();
+
+                  if (!res.ok) {
+                    alert(text);
+                    return;
+                  }
+
+                  alert("Registered Successfully");
+                  navigate("/login");
+
+                } catch (err) {
+                  alert("Server error");
+                }
+              }}
+            >
+              Register
+            </button>
+          </>
+        )}
 
       </div>
     </div>

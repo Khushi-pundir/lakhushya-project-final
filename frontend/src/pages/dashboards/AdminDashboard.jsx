@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem("activeTab") || "overview"
+  );
   // eslint-disable-next-line no-unused-vars
-  const [users, setUsers] = useState([]);   
+  const [users, setUsers] = useState([]);
   // eslint-disable-next-line no-unused-vars
   const [donations, setDonations] = useState([]);
   const navigate = useNavigate();
@@ -15,13 +17,13 @@ export default function AdminDashboard() {
     navigate("/login");
   };
   useEffect(() => {
-  fetch("http://localhost:5000/admin/users")
-    .then(res => res.json())
-    .then(data => setUsers(data));
+    fetch("http://localhost:5000/admin/users")
+      .then(res => res.json())
+      .then(data => setUsers(data));
 
-  fetch("http://localhost:5000/admin/donations")
-    .then(res => res.json())
-    .then(data => setDonations(data));
+    fetch("http://localhost:5000/admin/donations")
+      .then(res => res.json())
+      .then(data => setDonations(data));
   }, []);
 
   return (
@@ -30,7 +32,7 @@ export default function AdminDashboard() {
       {/* ===== NAVBAR ===== */}
       <div className="bg-white px-10 py-4 flex justify-between items-center shadow-sm">
         <h1 className="flex items-center gap-2 text-sm font-semibold text-green-600">
-           Lakhushya
+          Lakhushya
         </h1>
 
         <div className="flex items-center gap-6 text-sm">
@@ -67,12 +69,14 @@ export default function AdminDashboard() {
           ].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-lg capitalize whitespace-nowrap transition ${
-                activeTab === tab
-                  ? "bg-white text-green-700 font-semibold shadow"
-                  : "text-gray-600 hover:bg-white"
-              }`}
+              onClick={() => {
+                setActiveTab(tab);
+                localStorage.setItem("activeTab", tab);
+              }}
+              className={`px-4 py-2 rounded-lg capitalize whitespace-nowrap transition ${activeTab === tab
+                ? "bg-white text-green-700 font-semibold shadow"
+                : "text-gray-600 hover:bg-white"
+                }`}
             >
               {tab}
             </button>

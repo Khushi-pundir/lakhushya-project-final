@@ -1,3 +1,4 @@
+console.log("SERVER FILE LOADED");
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -5,13 +6,37 @@ const User = require("./models/User");
 const Donation = require("./models/Donation");
 const Event = require("./models/Event");
 const Request = require("./models/Request");
+const nodemailer = require("nodemailer");
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ EMAIL FUNCTION (ADD HERE)
+const sendOTPEmail = async (to, otp) => {
+  let transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "lavanya.sbt@gmail.com",
+      pass: "kvjptktebxnuldrg"
+    }
+  });
+
+  await transporter.sendMail({
+    from: "lavanya.sbt@gmail.com",
+    to,
+    subject: "OTP for Password Reset",
+    html: `<h2>Your OTP is: ${otp}</h2>`
+  });
+};
+
 mongoose.connect("mongodb://127.0.0.1:27017/lakhushya_db")
   .then(() => console.log("Database Connected"))
   .catch(err => console.log(err));
+
+app.get("/check", (req, res) => {
+  res.send("working");
+});
 
 app.post("/register", async (req, res) => {
 
@@ -28,16 +53,20 @@ app.post("/register", async (req, res) => {
     nationality,
     dob
   } = req.body;
+  const cleanEmail = email.trim().toLowerCase();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
 
+  if (!emailRegex.test(cleanEmail)) {
+    return res.status(400).send("Only valid Gmail addresses allowed");
+  }
   if (role === "Admin") {
     return res.status(403).send("Admin registration not allowed");
   }
 
-  // check if user already exists
-  const existingUser = await User.findOne({ email });
+  const existingUser = await User.findOne({ email: cleanEmail });
 
   if (existingUser) {
-    return res.status(400).send("User already exists");
+    return res.status(400).send("User not found");
   }
 
   // Require extra fields for Donor and Volunteer
@@ -49,7 +78,7 @@ app.post("/register", async (req, res) => {
 
   const newUser = new User({
     name,
-    email,
+    email: cleanEmail,
     password,
     role,
     phone,
@@ -70,7 +99,13 @@ app.post("/register", async (req, res) => {
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
-  const user = await User.findOne({ email, password });
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  const user = await User.findOne({
+    email: cleanEmail,
+    password: cleanPassword
+  });
 
   if (!user) {
     return res.status(401).send("Invalid email or password");
@@ -82,7 +117,58 @@ app.post("/login", async (req, res) => {
     userId: user._id
   });
 });
+// ✅ SEND OTP ROUTE (ADD HERE)
+app.post("/send-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
 
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 🔥 CHECK IF EMAIL EXISTS (ANY ROLE)
+    const existingUser = await User.findOne({ email: cleanEmail });
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: "User already exists"
+      });
+    }
+
+    // ✅ generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // store OTP
+    await User.updateOne(
+      { email: cleanEmail },
+      { otp, otpExpiry: Date.now() + 5 * 60 * 1000 }
+    );
+
+    await sendOTPEmail(cleanEmail, otp);
+
+    res.json({ message: "OTP sent successfully" });
+
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Error sending OTP" });
+  }
+});
+
+app.post("/reset-password", async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  const cleanEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ email: cleanEmail });
+
+  if (!user || user.otp !== otp || user.otpExpiry < Date.now()) {
+    return res.status(400).json({ message: "Invalid OTP" });
+  }
+
+  user.password = newPassword; // later we can hash
+  user.otp = undefined;
+  user.otpExpiry = undefined;
+
+  await user.save();
+
+  res.json({ message: "Password reset successful" });
+});
 // CREATE PICKUP REQUEST (DONOR or NGO)
 app.post("/donation/create", async (req, res) => {
   try {
@@ -407,23 +493,23 @@ app.get("/request/all", async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    
+
 
     // update expired requests in DB
-await Request.updateMany(
-  {
-    status: { $ne: "accepted" },
-    date: { $lt: today }
-  },
-  {
-    $set: { status: "expired" }
-  }
-);
+    await Request.updateMany(
+      {
+        status: { $ne: "accepted" },
+        date: { $lt: today }
+      },
+      {
+        $set: { status: "expired" }
+      }
+    );
 
-// fetch updated requests
-const requests = await Request.find()
-  .populate("ngoId", "name") 
-  .populate("donorId", "name"); 
+    // fetch updated requests
+    const requests = await Request.find()
+      .populate("ngoId", "name")
+      .populate("donorId", "name");
     res.json(requests);
   } catch (err) {
     res.status(500).json({ message: "Error fetching requests" });

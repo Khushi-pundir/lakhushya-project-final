@@ -2,8 +2,11 @@ import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 export default function VolunteerDashboard() {
-  const [activeTab, setActiveTab] = useState("events");
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem("activeTab") || "overview"
+  );
   const [pickups, setPickups] = useState([]);
+
   // TEMP – replace later with logged-in volunteer ID
   const volunteerId = localStorage.getItem("userId");
   const navigate = useNavigate();
@@ -92,10 +95,13 @@ export default function VolunteerDashboard() {
           ].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                localStorage.setItem("activeTab", tab);
+              }}
               className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1 ${activeTab === tab
-                  ? "bg-white text-green-700 font-semibold shadow"
-                  : "text-gray-600 hover:bg-white"
+                ? "bg-white text-green-700 font-semibold shadow"
+                : "text-gray-600 hover:bg-white"
                 }`}
             >
               {tab}

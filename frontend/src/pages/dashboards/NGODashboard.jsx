@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 export default function NgoDashboard() {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    localStorage.getItem("activeTab") || "overview"
+  );
   // eslint-disable-next-line no-unused-vars
   const [donations, setDonations] = useState([]);
   const [reqCategory, setReqCategory] = useState("");
@@ -112,9 +114,9 @@ export default function NgoDashboard() {
       if (!res.ok) throw new Error(data.message);
 
       setSuccess("Request published!");
-const updated = await fetch("http://localhost:5000/request/all");
-const updatedData = await updated.json();
-setRequests(updatedData);
+      const updated = await fetch("http://localhost:5000/request/all");
+      const updatedData = await updated.json();
+      setRequests(updatedData);
       setReqCategory("");
       setReqQuantity("");
       setReqDate("");
@@ -167,7 +169,10 @@ setRequests(updatedData);
           ].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab);
+                localStorage.setItem("activeTab", tab);
+              }}
               className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1 ${activeTab === tab
                 ? "bg-white text-green-700 font-semibold shadow"
                 : "text-gray-600 hover:bg-white"
