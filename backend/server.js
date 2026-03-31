@@ -127,9 +127,9 @@ app.post("/send-otp", async (req, res) => {
     // 🔥 CHECK IF EMAIL EXISTS (ANY ROLE)
     const existingUser = await User.findOne({ email: cleanEmail });
 
-    if (existingUser) {
-      return res.status(400).json({
-        message: "User already exists"
+    if (!existingUser) {
+      return res.status(404).json({
+        message: "User not found"
       });
     }
 

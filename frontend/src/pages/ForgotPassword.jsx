@@ -13,7 +13,7 @@ export default function ForgotPassword() {
   const [otpVerified, setOtpVerified] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [oldPassword, setOldPassword] = useState("");
+
 
   // OTP input handler
   const handleOtpChange = (value, index) => {
@@ -73,21 +73,25 @@ export default function ForgotPassword() {
   const resetPassword = async () => {
     const finalOtp = otp.join("");
 
+    // ✅ check OTP verified
     if (!otpVerified) {
       alert("Please verify OTP first");
       return;
     }
 
+    // ✅ check all fields
+    if (!email || !finalOtp || !password || !confirmPassword) {
+      alert("All fields are required");
+      return;
+    }
+
+    // ✅ password match (BONUS FIX)
     if (password !== confirmPassword) {
       alert("Passwords do not match");
       return;
     }
 
-    if (password === oldPassword) {
-      alert("New password cannot be same as old password");
-      return;
-    }
-
+    // ✅ strong password validation
     if (!validatePassword(password)) {
       alert(
         "Password must be at least 8 characters, include 1 uppercase letter, 1 digit, and no spaces"
@@ -96,19 +100,18 @@ export default function ForgotPassword() {
     }
 
     try {
-      await axios.post("http://localhost:5000/reset-password", {
+      const res = await axios.post("http://localhost:5000/reset-password", {
         email,
         otp: finalOtp,
         newPassword: password,
       });
 
-      alert("Password reset successful");
+      alert(res.data.message || "Password reset successful");
 
-      // ✅ redirect to login
       navigate("/login");
 
     } catch (err) {
-      alert("Invalid OTP or error");
+      alert(err.response?.data?.message || "Error resetting password");
     }
   };
 
@@ -201,13 +204,6 @@ export default function ForgotPassword() {
             {/* PASSWORD FIELDS */}
             {otpVerified && (
               <>
-                <input
-                  type="password"
-                  className="w-full mt-4 p-3 border rounded-lg"
-                  placeholder="Old Password"
-                  value={oldPassword}
-                  onChange={(e) => setOldPassword(e.target.value)}
-                />
 
                 <input
                   type="password"
