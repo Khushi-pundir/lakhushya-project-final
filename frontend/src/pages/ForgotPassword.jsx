@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -31,12 +30,24 @@ export default function ForgotPassword() {
   // Send OTP
   const sendOtp = async () => {
     try {
-      const res = await axios.post("http://localhost:5000/send-otp", {
-        email,
-        type: "forgot"
+      const res = await fetch("http://localhost:5001/send-otp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email,
+          type: "forgot"
+        })
       });
 
-      alert(res.data.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Error sending OTP");
+      }
+
+      alert(data.message);
 
       setOtpSent(true);
       setOtpVerified(false);
@@ -44,7 +55,7 @@ export default function ForgotPassword() {
       setCanResend(false);
 
     } catch (err) {
-      alert(err.response?.data?.message || "Error sending OTP");
+      alert(err.message || "Error sending OTP");
     }
   };
 
@@ -101,18 +112,30 @@ export default function ForgotPassword() {
     }
 
     try {
-      const res = await axios.post("http://localhost:5000/reset-password", {
-        email,
-        otp: finalOtp,
-        newPassword: password,
+      const res = await fetch("http://localhost:5001/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email,
+          otp: finalOtp,
+          newPassword: password,
+        })
       });
 
-      alert(res.data.message || "Password reset successful");
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Error resetting password");
+      }
+
+      alert(data.message || "Password reset successful");
 
       navigate("/login");
 
     } catch (err) {
-      alert(err.response?.data?.message || "Error resetting password");
+      alert(err.message || "Error resetting password");
     }
   };
 

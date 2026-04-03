@@ -25,14 +25,14 @@ export default function NgoDashboard() {
     navigate("/login");
   };
   useEffect(() => {
-    fetch(`http://localhost:5000/ngo/donations/${ngoId}`)
+    fetch(`http://localhost:5001/ngo/donations/${ngoId}`)
       .then(res => res.json())
       .then(data => setDonations(data))
 
       .catch(err => console.log(err));
   }, [ngoId]);
   useEffect(() => {
-    fetch("http://localhost:5000/request/all")
+    fetch("http://localhost:5001/request/all")
       .then(res => res.json())
       .then(data => setRequests(data))
       .catch(err => console.log(err));
@@ -86,7 +86,7 @@ export default function NgoDashboard() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:5000/request/create", {
+      const res = await fetch("http://localhost:5001/request/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -114,7 +114,7 @@ export default function NgoDashboard() {
       if (!res.ok) throw new Error(data.message);
 
       setSuccess("Request published!");
-      const updated = await fetch("http://localhost:5000/request/all");
+      const updated = await fetch("http://localhost:5001/request/all");
       const updatedData = await updated.json();
       setRequests(updatedData);
       setReqCategory("");
@@ -311,7 +311,7 @@ export default function NgoDashboard() {
                       <button
                         className="border px-4 py-1 rounded-lg text-sm"
                         onClick={() =>
-                          fetch(`http://localhost:5000/ngo/decline/${donation._id}`, {
+                          fetch(`http://localhost:5001/ngo/decline/${donation._id}`, {
                             method: "POST",
                           }).then(() => window.location.reload())
                         }
@@ -322,7 +322,7 @@ export default function NgoDashboard() {
                       <button
                         className="bg-green-500 text-white px-4 py-1 rounded-lg text-sm"
                         onClick={() =>
-                          fetch(`http://localhost:5000/ngo/accept/${donation._id}`, {
+                          fetch(`http://localhost:5001/ngo/accept/${donation._id}`, {
                             method: "POST",
                           }).then(() => window.location.reload())
                         }
@@ -334,9 +334,16 @@ export default function NgoDashboard() {
 
                   {/* NGO APPROVED */}
                   {donation.status === "ngo_approved" && (
-                    <span className="text-xs bg-green-100 text-green-700 px-4 py-1 rounded-full">
-                      Accepted
-                    </span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-xs bg-green-100 text-green-700 px-4 py-1 rounded-full">
+                        Accepted
+                      </span>
+                      {donation.noVolunteerAvailable ? (
+                        <span className="text-xs bg-rose-100 text-rose-700 px-4 py-1 rounded-full">
+                          No volunteers found
+                        </span>
+                      ) : null}
+                    </div>
                   )}
 
                   {/* NGO DECLINED */}

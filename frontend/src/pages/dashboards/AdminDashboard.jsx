@@ -1,327 +1,278 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import config from "../../config";
+
+const tabs = [
+  "overview",
+  "user verification",
+  "manage accounts",
+  "monitoring",
+  "feedback",
+  "analytics",
+];
+
+function formatDate(value) {
+  if (!value) {
+    return "N/A";
+  }
+  return new Date(value).toLocaleDateString();
+}
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState(
-    localStorage.getItem("activeTab") || "overview"
-  );
-  // eslint-disable-next-line no-unused-vars
+  const [activeTab, setActiveTab] = useState(localStorage.getItem("activeTab") || "overview");
   const [users, setUsers] = useState([]);
-  // eslint-disable-next-line no-unused-vars
   const [donations, setDonations] = useState([]);
+  const [feedback, setFeedback] = useState([]);
+  const [pendingNgos, setPendingNgos] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [message, setMessage] = useState("");
   const navigate = useNavigate();
+  const adminId = localStorage.getItem("userId");
+
+  const fetchDashboardData = useCallback(async () => {
+    const [usersRes, donationsRes, feedbackRes, pendingRes, analyticsRes] = await Promise.all([
+      fetch(`${config.API_URL}/admin/users`),
+      fetch(`${config.API_URL}/admin/donations`),
+      fetch(`${config.API_URL}/admin/feedback`),
+      fetch(`${config.API_URL}/admin/pending-ngos`),
+      fetch(`${config.API_URL}/admin/analytics`),
+    ]);
+
+    const [usersData, donationsData, feedbackData, pendingData, analyticsData] = await Promise.all([
+      usersRes.json(),
+      donationsRes.json(),
+      feedbackRes.json(),
+      pendingRes.json(),
+      analyticsRes.json(),
+    ]);
+
+    setUsers(Array.isArray(usersData) ? usersData : []);
+    setDonations(Array.isArray(donationsData) ? donationsData : []);
+    setFeedback(Array.isArray(feedbackData) ? feedbackData : []);
+    setPendingNgos(Array.isArray(pendingData) ? pendingData : []);
+    setAnalytics(analyticsData || null);
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData().catch(() => setMessage("Unable to load admin dashboard data."));
+  }, [fetchDashboardData]);
 
   const handleLogout = () => {
     localStorage.removeItem("userId");
     localStorage.removeItem("role");
     navigate("/login");
   };
-  useEffect(() => {
-    fetch("http://localhost:5000/admin/users")
-      .then(res => res.json())
-      .then(data => setUsers(data));
 
-    fetch("http://localhost:5000/admin/donations")
-      .then(res => res.json())
-      .then(data => setDonations(data));
-  }, []);
+  const handleVerification = async (userId, action) => {
+    const endpoint = action === "approve" ? "verify-ngo" : "reject-ngo";
+    const response = await fetch(`${config.API_URL}/admin/${endpoint}/${userId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ adminId }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      setMessage(data.message || "Unable to update NGO verification");
+      return;
+    }
+
+    setMessage(data.message);
+    await fetchDashboardData();
+  };
+
+  const totals = useMemo(() => {
+    const donors = users.filter((user) => user.role === "Donor").length;
+    const ngos = users.filter((user) => user.role === "NGO").length;
+    const volunteers = users.filter((user) => user.role === "Volunteer").length;
+
+    return {
+      donors,
+      ngos,
+      volunteers,
+    };
+  }, [users]);
 
   return (
-    <div className="min-h-screen bg-[#FBF7F2]">
-
-      {/* ===== NAVBAR ===== */}
-      <div className="bg-white px-10 py-4 flex justify-between items-center shadow-sm">
-        <h1 className="flex items-center gap-2 text-sm font-semibold text-green-600">
-          Lakhushya
-        </h1>
-
-        <div className="flex items-center gap-6 text-sm">
-          <span className="cursor-pointer">Home</span>
-          <span className="cursor-pointer">Dashboard</span>
-          <span className="text-gray-500 hidden sm:inline">Welcome, admin</span>
-          <button onClick={handleLogout}>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f5fbf3_0%,#ffffff_100%)]">
+      <div className="border-b border-emerald-100 bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div>
+            <h1 className="text-2xl font-bold text-emerald-900">Lakhushya</h1>
+            <p className="text-sm text-slate-500">From Giving to Impact</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="rounded-full border border-emerald-200 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
+          >
             Logout
           </button>
         </div>
       </div>
 
-      {/* ===== HEADER ===== */}
-      <div className="px-10 py-8">
-        <h2 className="text-2xl font-bold text-green-900 flex items-center gap-2">
-          🛡️ Admin Dashboard
-        </h2>
-        <p className="text-gray-600 mt-1">
-          System administration and monitoring
-        </p>
-      </div>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="rounded-[32px] border border-emerald-100 bg-white p-6 shadow-sm">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">Admin Dashboard</p>
+          <h2 className="mt-2 text-3xl font-bold text-emerald-950">Verify NGOs, monitor feedback, and run platform operations.</h2>
+          <p className="mt-3 max-w-3xl text-sm text-slate-500">
+            NGOs are now stored in the database at registration with a pending verification state. Only admin-approved NGOs can be treated as verified.
+          </p>
+        </section>
 
-      {/* ===== TABS ===== */}
-      <div className="px-10">
-        <div className="bg-[#F2EEE6] rounded-xl p-3 flex gap-20 text-sm overflow-x-auto">
-          {[
-            "overview",
-            "user verification",
-            "manage accounts",
-            "monitoring",
-            "complaints",
-            "reports",
-            "analytics",
-          ].map((tab) => (
+        <div className="mt-8 flex gap-2 overflow-x-auto rounded-2xl bg-emerald-50 p-2 no-scrollbar">
+          {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => {
                 setActiveTab(tab);
                 localStorage.setItem("activeTab", tab);
               }}
-              className={`px-4 py-2 rounded-lg capitalize whitespace-nowrap transition ${activeTab === tab
-                ? "bg-white text-green-700 font-semibold shadow"
-                : "text-gray-600 hover:bg-white"
-                }`}
+              className={`whitespace-nowrap rounded-2xl px-4 py-2 text-sm font-medium capitalize transition ${
+                activeTab === tab ? "bg-white text-emerald-700 shadow" : "text-slate-600 hover:bg-white/70"
+              }`}
             >
               {tab}
             </button>
           ))}
         </div>
-      </div>
 
-      {/* ================= OVERVIEW ================= */}
-      {activeTab === "overview" && (
-        <div className="px-10 py-8 space-y-8">
+        {message ? (
+          <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p>
+        ) : null}
 
-          {/* METRICS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              ["Total Users", "1,250", "👥"],
-              ["Active Donations", "89", "🎁"],
-              ["Pending Verifications", "12", "⚠️"],
-              ["Active Complaints", "3", "💬"],
-            ].map(([title, value, icon]) => (
-              <div
-                key={title}
-                className="bg-white p-6 rounded-xl border border-gray-100 flex justify-between items-center"
-              >
-                <div>
-                  <p className="text-sm text-gray-500">{title}</p>
-                  <h3 className="text-2xl font-bold text-green-700 mt-2">
-                    {value}
-                  </h3>
-                </div>
-                <div className="text-2xl">{icon}</div>
-              </div>
-            ))}
+        {activeTab === "overview" ? (
+          <div className="mt-8 grid gap-6 lg:grid-cols-4">
+            <StatCard title="Total Users" value={users.length} />
+            <StatCard title="Total Donations" value={analytics?.totalDonations || donations.length} />
+            <StatCard title="Pending NGO Verifications" value={pendingNgos.length} />
+            <StatCard title="Feedback Entries" value={feedback.length} />
           </div>
+        ) : null}
 
-          {/* CHART PLACEHOLDERS */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-xl border border-gray-100 h-72">
-              <h3 className="font-semibold mb-2">Platform Growth</h3>
-              <div className="h-full flex items-center justify-center text-gray-400">
-                Line Chart Placeholder
-              </div>
+        {activeTab === "user verification" ? (
+          <section className="mt-8 rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-emerald-950">Pending NGO Verification</h3>
+            <p className="mt-1 text-sm text-slate-500">After an NGO registers, approve it here to store it as verified in the database and allow platform use.</p>
+
+            <div className="mt-6 space-y-4">
+              {pendingNgos.length ? (
+                pendingNgos.map((ngo) => (
+                  <div key={ngo._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-5 shadow-sm">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-slate-800">{ngo.name}</p>
+                        <p className="mt-1 text-sm text-slate-500">{ngo.email}</p>
+                        <p className="mt-1 text-sm text-slate-500">{ngo.address}, {ngo.city}, {ngo.state}</p>
+                        <p className="mt-1 text-xs text-slate-400">Registered: {formatDate(ngo.createdAt)}</p>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleVerification(ngo._id, "approve")}
+                          className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                        >
+                          Approve NGO
+                        </button>
+                        <button
+                          onClick={() => handleVerification(ngo._id, "reject")}
+                          className="rounded-2xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <EmptyState title="No pending NGOs" description="All NGO registrations have been reviewed." />
+              )}
             </div>
+          </section>
+        ) : null}
 
-            <div className="bg-white p-6 rounded-xl border border-gray-100 h-72">
-              <h3 className="font-semibold mb-2">User Distribution</h3>
-              <div className="h-full flex items-center justify-center text-gray-400">
-                Pie Chart Placeholder
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= USER VERIFICATION ================= */}
-      {activeTab === "user verification" && (
-        <div className="px-10 py-8">
-          <div className="bg-white p-6 rounded-xl border border-gray-100">
-            <h3 className="text-lg font-semibold mb-1">
-              Pending User Verifications
-            </h3>
-            <p className="text-sm text-gray-600 mb-6">
-              Review and verify new user registrations
-            </p>
-
-            {[
-              ["Priya Sharma", "NGO", "priya@example.com", "2024-01-20"],
-              ["Green Earth NGO", "NGO", "contact@greenearth.org", "2024-01-19"],
-            ].map(([name, role, email, date]) => (
-              <div
-                key={email}
-                className="bg-[#F9F7F3] p-5 rounded-lg flex flex-col md:flex-row md:justify-between gap-4 mb-4"
-              >
-                <div>
-                  <p className="font-medium text-sm">
-                    {name} <span className="text-xs bg-gray-200 px-2 py-0.5 rounded ml-2">{role}</span>
-                  </p>
-                  <p className="text-xs text-gray-500">Email: {email}</p>
-                  <p className="text-xs text-gray-500">Registered: {date}</p>
-                </div>
-
-                <div className="flex gap-2 items-center">
-                  <button className="bg-green-500 text-white px-4 py-1.5 rounded-lg text-xs">
-                    Approve
-                  </button>
-                  <button className="border px-4 py-1.5 rounded-lg text-xs">
-                    Reject
-                  </button>
-                  <button className="border px-4 py-1.5 rounded-lg text-xs">
-                    Review Docs
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ================= MANAGE ACCOUNTS ================= */}
-      {activeTab === "manage accounts" && (
-        <div className="px-10 py-8">
-          <div className="bg-white p-6 rounded-xl border border-gray-100">
-            <h3 className="text-lg font-semibold mb-4">User Account Management</h3>
-
-            <input
-              type="text"
-              placeholder="Search users by name, email, or role..."
-              className="w-full mb-6 p-3 border rounded-lg"
-            />
-
-            {[
-              ["Priya Sharma", "NGO"],
-              ["Rajesh Kumar", "Volunteer"],
-              ["Green Earth NGO", "NGO"],
-            ].map(([name, role]) => (
-              <div
-                key={name}
-                className="flex justify-between items-center bg-[#F9F7F3] p-4 rounded-lg mb-3"
-              >
-                <div>
-                  <p className="font-medium text-sm">{name}</p>
-                  <p className="text-xs text-gray-500">{role}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button className="border px-3 py-1.5 rounded-lg text-xs">
-                    View Profile
-                  </button>
-                  <button className="border px-3 py-1.5 rounded-lg text-xs text-red-600">
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ================= MONITORING ================= */}
-      {activeTab === "monitoring" && (
-        <div className="px-10 py-8 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              ["Total Donors", "971"],
-              ["Total NGOs", "45"],
-              ["Total Volunteers", "234"],
-              ["Completed Pickups", "567"],
-            ].map(([label, value]) => (
-              <div key={label} className="bg-white p-6 rounded-xl border">
-                <p className="text-sm text-gray-500">{label}</p>
-                <h3 className="text-2xl font-bold text-green-600 mt-2">
-                  {value}
-                </h3>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border">
-            <h3 className="font-semibold mb-4">NGO Performance Overview</h3>
-
-            {[
-              ["Hope Foundation", "4.8"],
-              ["Care Trust", "4.6"],
-              ["Green Earth", "4.9"],
-            ].map(([ngo, rating]) => (
-              <div
-                key={ngo}
-                className="flex justify-between items-center bg-[#F9F7F3] p-4 rounded-lg mb-3"
-              >
-                <p className="text-sm font-medium">{ngo}</p>
-                <span className="text-sm">⭐ {rating}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ================= COMPLAINTS ================= */}
-      {activeTab === "complaints" && (
-        <div className="px-10 py-8">
-          <div className="bg-white p-6 rounded-xl border">
-            <h3 className="font-semibold mb-6">Manage Complaints</h3>
-
-            {[
-              ["Pickup not completed", "High", "Open"],
-              ["Duplicate donation request", "Medium", "In Progress"],
-            ].map(([title, priority, status]) => (
-              <div
-                key={title}
-                className="flex justify-between items-center bg-[#F9F7F3] p-4 rounded-lg mb-4"
-              >
-                <div>
-                  <p className="font-medium text-sm">{title}</p>
-                  <p className="text-xs text-gray-500">
-                    Priority: {priority} · Status: {status}
+        {activeTab === "manage accounts" ? (
+          <section className="mt-8 rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-emerald-950">All Users</h3>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {users.map((user) => (
+                <div key={user._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+                  <p className="font-semibold text-slate-800">{user.name}</p>
+                  <p className="mt-1 text-sm text-slate-500">{user.role}</p>
+                  <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Verification: {user.verificationStatus || (user.verified ? "approved" : "pending")}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button className="border px-3 py-1.5 rounded-lg text-xs">
-                    View Details
-                  </button>
-                  <button className="bg-green-500 text-white px-3 py-1.5 rounded-lg text-xs">
-                    Take Action
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ================= REPORTS ================= */}
-      {activeTab === "reports" && (
-        <div className="px-10 py-8">
-          <div className="bg-white p-6 rounded-xl border">
-            <h3 className="font-semibold mb-6">Generate Reports</h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                "User Registration Report",
-                "Donation Summary",
-                "Platform Analytics",
-                "User Activity Report",
-                "Pickup Performance",
-                "Complaint Summary",
-              ].map((report) => (
-                <button
-                  key={report}
-                  className="bg-[#F9F7F3] p-4 rounded-lg text-sm text-left hover:bg-gray-100"
-                >
-                  ⬇️ {report}
-                </button>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          </section>
+        ) : null}
 
-      {/* ================= ANALYTICS ================= */}
-      {activeTab === "analytics" && (
-        <div className="px-10 py-8">
-          <div className="bg-white p-6 rounded-xl border h-72 flex items-center justify-center text-gray-400">
-            Advanced analytics dashboard placeholder
+        {activeTab === "monitoring" ? (
+          <div className="mt-8 grid gap-6 lg:grid-cols-4">
+            <StatCard title="Donors" value={totals.donors} />
+            <StatCard title="NGOs" value={totals.ngos} />
+            <StatCard title="Volunteers" value={totals.volunteers} />
+            <StatCard title="Active Deliveries" value={analytics?.activeDeliveries || 0} />
           </div>
-        </div>
-      )}
+        ) : null}
 
+        {activeTab === "feedback" ? (
+          <section className="mt-8 rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-emerald-950">Donor Feedback</h3>
+            <p className="mt-1 text-sm text-slate-500">Feedback submitted by donors is stored in MongoDB and surfaced here for admin review.</p>
+            <div className="mt-6 space-y-4">
+              {feedback.length ? (
+                feedback.map((entry) => (
+                  <div key={entry._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-slate-800">{entry.donorId?.name || "Donor feedback"}</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          NGO: {entry.ngoId?.name || "N/A"} • Volunteer: {entry.volunteerId?.name || "N/A"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-400">Submitted: {formatDate(entry.createdAt)}</p>
+                      </div>
+                      <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700">
+                        {entry.rating}/5
+                      </span>
+                    </div>
+                    <p className="mt-4 text-sm text-slate-600">{entry.message || "No written message provided."}</p>
+                  </div>
+                ))
+              ) : (
+                <EmptyState title="No feedback yet" description="Submitted donor feedback will appear here." />
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "analytics" ? (
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            <StatCard title="Users by Role" value={`${totals.donors} D / ${totals.ngos} N / ${totals.volunteers} V`} />
+            <StatCard title="Active Deliveries" value={analytics?.activeDeliveries || 0} />
+          </div>
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
+function StatCard({ title, value }) {
+  return (
+    <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+      <p className="text-sm text-slate-500">{title}</p>
+      <p className="mt-2 text-3xl font-bold text-emerald-700">{value}</p>
+    </div>
+  );
+}
+
+function EmptyState({ title, description }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/70 p-6 text-center">
+      <p className="text-base font-semibold text-emerald-900">{title}</p>
+      <p className="mt-2 text-sm text-slate-500">{description}</p>
     </div>
   );
 }

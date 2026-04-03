@@ -6,7 +6,18 @@ const volunteerSchema = new mongoose.Schema({
     ref: "User"
   },
   phone: String,
-  availability: String
-});
+  availability: {
+    type: Boolean,
+    default: true
+  },
+  location: {
+    lat: Number,
+    lng: Number
+  },
+  points: {
+    type: Number,
+    default: 0
+  }
+}, { timestamps: true });
 
 module.exports = mongoose.model("Volunteer", volunteerSchema);
