@@ -46,3 +46,58 @@
   padding-left: 100%;
   animation: marquee 15s linear infinite;
 }
+
+@keyframes soft-float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes rise-in {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-soft-float {
+  animation: soft-float 6s ease-in-out infinite;
+}
+
+.animate-soft-float-delayed {
+  animation: soft-float 7.5s ease-in-out infinite;
+}
+
+.animate-rise-in {
+  animation: rise-in 0.8s ease-out both;
+}
+
+.animate-rise-in-delayed {
+  animation: rise-in 1s ease-out both;
+}
+
+@keyframes path-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.28);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.animate-path-pulse {
+  animation: path-pulse 2.6s infinite;
+}

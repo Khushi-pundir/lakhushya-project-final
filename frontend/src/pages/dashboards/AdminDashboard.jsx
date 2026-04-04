@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import config from "../../config";
+import { clearStoredAuth, getStoredAuth, setStoredName } from "../../utils/auth";
 
 const tabs = [
   "overview",
@@ -27,7 +28,8 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [message, setMessage] = useState("");
   const navigate = useNavigate();
-  const adminId = localStorage.getItem("userId");
+  const { userId: adminId, name: storedAdminName } = getStoredAuth();
+  const [adminName, setAdminName] = useState(storedAdminName);
 
   const fetchDashboardData = useCallback(async () => {
     const [usersRes, donationsRes, feedbackRes, pendingRes, analyticsRes] = await Promise.all([
@@ -54,12 +56,58 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    fetchDashboardData().catch(() => setMessage("Unable to load admin dashboard data."));
-  }, [fetchDashboardData]);
+    if (!adminId) {
+      navigate("/login");
+      return;
+    }
+
+    const refreshDashboard = () => {
+      fetchDashboardData().catch(() => setMessage("Unable to load admin dashboard data."));
+    };
+
+    refreshDashboard();
+
+    const handleFocus = () => refreshDashboard();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    }, 15000);
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [adminId, fetchDashboardData, navigate]);
+
+  useEffect(() => {
+    if (!adminId || adminName) {
+      return;
+    }
+
+    fetch(`${config.API_URL}/user/${adminId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.name) {
+          setAdminName(data.name);
+          setStoredName(data.name);
+        }
+      })
+      .catch(() => {});
+  }, [adminId, adminName]);
 
   const handleLogout = () => {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("role");
+    clearStoredAuth();
     navigate("/login");
   };
 
@@ -94,6 +142,7 @@ export default function AdminDashboard() {
       volunteers,
     };
   }, [users]);
+  const displayAdminName = adminName || users.find((user) => String(user._id) === String(adminId))?.name || "";
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f5fbf3_0%,#ffffff_100%)]">
@@ -116,6 +165,10 @@ export default function AdminDashboard() {
         <section className="rounded-[32px] border border-emerald-100 bg-white p-6 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">Admin Dashboard</p>
           <h2 className="mt-2 text-3xl font-bold text-emerald-950">Verify NGOs, monitor feedback, and run platform operations.</h2>
+          <p className="mt-3 text-base font-medium text-emerald-700">
+            Welcome{displayAdminName ? ", " : ""}
+            {displayAdminName ? <span className="font-bold uppercase tracking-wide text-emerald-800">{displayAdminName}</span> : null}
+          </p>
           <p className="mt-3 max-w-3xl text-sm text-slate-500">
             NGOs are now stored in the database at registration with a pending verification state. Only admin-approved NGOs can be treated as verified.
           </p>

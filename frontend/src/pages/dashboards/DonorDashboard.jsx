@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MapView from "../../components/MapView";
 import config from "../../config";
+import { clearStoredAuth, getStoredAuth, setStoredName } from "../../utils/auth";
 
 const tabs = [
   "overview",
@@ -30,6 +31,28 @@ function formatStatus(status = "") {
 
 function getBadgeStyle(status) {
   return statusStyles[status] || "bg-slate-100 text-slate-700";
+}
+
+function getQuantityMeta(category) {
+  if (category === "Food") {
+    return {
+      min: "0.1",
+      step: "0.1",
+      placeholder: "Enter quantity in kg",
+      unit: "kg",
+      inputMode: "decimal",
+      helperText: "Food donations can be entered in kilograms, including decimals.",
+    };
+  }
+
+  return {
+    min: "1",
+    step: "1",
+    placeholder: "Enter item count",
+    unit: "items",
+    inputMode: "numeric",
+    helperText: "Clothes, books, and other donations must be positive whole numbers.",
+  };
 }
 
 function toMinutesLabel(value) {
@@ -190,7 +213,8 @@ export default function DonorDashboard() {
     mobile: "",
   });
 
-  const donorId = localStorage.getItem("userId");
+  const { userId: donorId, name: storedDonorName } = getStoredAuth();
+  const [donorName, setDonorName] = useState(storedDonorName);
   const navigate = useNavigate();
 
   const fetchDonations = useCallback(async () => {
@@ -215,12 +239,55 @@ export default function DonorDashboard() {
       return;
     }
 
-    fetchDonations().catch(() => setError("Unable to load your donations"));
-    fetchRequests().catch(() => {});
+    const refreshDashboard = () => {
+      fetchDonations().catch(() => setError("Unable to load your donations"));
+      fetchRequests().catch(() => {});
+    };
+
+    refreshDashboard();
+
+    const handleFocus = () => refreshDashboard();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    }, 15000);
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [donorId, fetchDonations, fetchRequests, navigate]);
+
+  useEffect(() => {
+    if (!donorId || donorName) {
+      return;
+    }
+
+    fetch(`${config.API_URL}/user/${donorId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.name) {
+          setDonorName(data.name);
+          setStoredName(data.name);
+        }
+      })
+      .catch(() => {});
+  }, [donorId, donorName]);
 
   const selectedDonation =
     donations.find((donation) => donation._id === selectedDonationId) || donations[0] || null;
+  const displayDonorName = donorName || donations[0]?.donorId?.name || "";
 
   const stats = useMemo(() => {
     const total = donations.length;
@@ -240,6 +307,7 @@ export default function DonorDashboard() {
 
   const recentDonations = donations.slice(0, 3);
   const trackingModel = selectedDonation ? buildTrackingModel(selectedDonation) : { markers: [], segments: [] };
+  const quantityMeta = useMemo(() => getQuantityMeta(form.category), [form.category]);
 
   useEffect(() => {
     if (selectedDonation?._id) {
@@ -248,12 +316,36 @@ export default function DonorDashboard() {
   }, [selectedDonation]);
 
   const handleLogout = () => {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("role");
+    clearStoredAuth();
     navigate("/login");
   };
 
   const handleInput = (key, value) => {
+    if (key === "category") {
+      setForm((previous) => ({
+        ...previous,
+        category: value,
+        quantity: value !== "Food" && previous.quantity.includes(".") ? "" : previous.quantity,
+      }));
+      return;
+    }
+
+    if (key === "quantity") {
+      const sanitizedValue = value.replace(/[^\d.]/g, "");
+      const [wholePart, ...decimalParts] = sanitizedValue.split(".");
+      const normalizedValue = decimalParts.length ? `${wholePart}.${decimalParts.join("")}` : wholePart;
+
+      if (form.category !== "Food" && normalizedValue.includes(".")) {
+        return;
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        [key]: normalizedValue,
+      }));
+      return;
+    }
+
     setForm((previous) => ({
       ...previous,
       [key]: value,
@@ -303,6 +395,17 @@ export default function DonorDashboard() {
 
     if (!/^\d{10}$/.test(mobile)) {
       setError("Mobile number must be 10 digits.");
+      return;
+    }
+
+    const quantityNumber = Number(quantity);
+    if (!Number.isFinite(quantityNumber) || quantityNumber <= 0) {
+      setError("Quantity must be greater than zero.");
+      return;
+    }
+
+    if (category !== "Food" && !Number.isInteger(quantityNumber)) {
+      setError("Only food donations can use decimal quantity. Other categories must be whole numbers.");
       return;
     }
 
@@ -444,6 +547,10 @@ export default function DonorDashboard() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">Donor Dashboard</p>
               <h2 className="mt-2 text-3xl font-bold text-emerald-950">Donate confidently and track every step.</h2>
+              <p className="mt-3 text-base font-medium text-emerald-700">
+                Welcome{displayDonorName ? ", " : ""}
+                {displayDonorName ? <span className="font-bold uppercase tracking-wide text-emerald-800">{displayDonorName}</span> : null}
+              </p>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
                 See the nearest NGO, follow volunteer movement in real time, and watch each donation move from giving to impact.
               </p>
@@ -550,7 +657,12 @@ export default function DonorDashboard() {
                   type="number"
                   value={form.quantity}
                   onChange={(value) => handleInput("quantity", value)}
-                  placeholder="Enter quantity"
+                  placeholder={quantityMeta.placeholder}
+                  min={quantityMeta.min}
+                  step={quantityMeta.step}
+                  inputMode={quantityMeta.inputMode}
+                  suffix={quantityMeta.unit}
+                  helperText={quantityMeta.helperText}
                 />
                 <TextAreaField
                   className="md:col-span-2"
@@ -874,17 +986,42 @@ function StatCard({ label, value, tone }) {
   );
 }
 
-function TextField({ label, value, onChange, placeholder, type = "text", className = "" }) {
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  className = "",
+  min,
+  step,
+  inputMode,
+  suffix,
+  helperText,
+}) {
   return (
     <label className={`block text-sm font-medium text-slate-700 ${className}`}>
       {label}
-      <input
-        type={type}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="mt-2 w-full rounded-2xl border border-emerald-100 bg-slate-50 px-4 py-3 outline-none transition focus:border-emerald-300"
-      />
+      <div className="relative mt-2">
+        <input
+          type={type}
+          value={value}
+          min={min}
+          step={step}
+          inputMode={inputMode}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={`w-full rounded-2xl border border-emerald-100 bg-slate-50 px-4 py-3 outline-none transition focus:border-emerald-300 ${
+            suffix ? "pr-16" : ""
+          }`}
+        />
+        {suffix ? (
+          <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm font-semibold text-emerald-700">
+            {suffix}
+          </span>
+        ) : null}
+      </div>
+      {helperText ? <p className="mt-2 text-xs text-slate-500">{helperText}</p> : null}
     </label>
   );
 }

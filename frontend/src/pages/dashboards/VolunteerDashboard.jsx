@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import config from "../../config";
+import { clearStoredAuth, getStoredAuth, setStoredName } from "../../utils/auth";
 
 const tabs = ["overview", "manage pickups", "otp verification"];
 
@@ -25,7 +26,8 @@ export default function VolunteerDashboard() {
   const [message, setMessage] = useState("");
   const [pickupOtp, setPickupOtp] = useState({});
   const [deliveryOtp, setDeliveryOtp] = useState({});
-  const volunteerId = localStorage.getItem("userId");
+  const { userId: volunteerId, name: storedVolunteerName } = getStoredAuth();
+  const [volunteerName, setVolunteerName] = useState(storedVolunteerName);
   const navigate = useNavigate();
 
   const fetchPickups = useCallback(async () => {
@@ -35,12 +37,58 @@ export default function VolunteerDashboard() {
   }, [volunteerId]);
 
   useEffect(() => {
-    fetchPickups().catch(() => setMessage("Unable to load volunteer tasks."));
-  }, [fetchPickups]);
+    if (!volunteerId) {
+      navigate("/login");
+      return;
+    }
+
+    const refreshDashboard = () => {
+      fetchPickups().catch(() => setMessage("Unable to load volunteer tasks."));
+    };
+
+    refreshDashboard();
+
+    const handleFocus = () => refreshDashboard();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    }, 15000);
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchPickups, navigate, volunteerId]);
+
+  useEffect(() => {
+    if (!volunteerId || volunteerName) {
+      return;
+    }
+
+    fetch(`${config.API_URL}/user/${volunteerId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.name) {
+          setVolunteerName(data.name);
+          setStoredName(data.name);
+        }
+      })
+      .catch(() => {});
+  }, [volunteerId, volunteerName]);
 
   const handleLogout = () => {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("role");
+    clearStoredAuth();
     navigate("/login");
   };
 
@@ -120,6 +168,11 @@ export default function VolunteerDashboard() {
 
   const incomingRequests = pickups.filter((pickup) => !pickup.volunteerId);
   const activeTasks = pickups.filter((pickup) => String(pickup.volunteerId?._id || pickup.volunteerId || "") === String(volunteerId));
+  const displayVolunteerName =
+    volunteerName ||
+    activeTasks[0]?.volunteerId?.name ||
+    pickups.find((pickup) => String(pickup.volunteerId?._id || pickup.volunteerId || "") === String(volunteerId))?.volunteerId?.name ||
+    "";
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f4fbf2_0%,#ffffff_100%)]">
@@ -142,6 +195,10 @@ export default function VolunteerDashboard() {
         <section className="rounded-[32px] border border-emerald-100 bg-white p-6 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">Volunteer Dashboard</p>
           <h2 className="mt-2 text-3xl font-bold text-emerald-950">Accept nearby requests, verify OTPs, and complete deliveries.</h2>
+          <p className="mt-3 text-base font-medium text-emerald-700">
+            Welcome{displayVolunteerName ? ", " : ""}
+            {displayVolunteerName ? <span className="font-bold uppercase tracking-wide text-emerald-800">{displayVolunteerName}</span> : null}
+          </p>
           <p className="mt-3 max-w-3xl text-sm text-slate-500">
             NGO accepts donation, volunteer receives request, accepts or rejects, then verifies donor OTP at pickup and NGO OTP at final delivery.
           </p>

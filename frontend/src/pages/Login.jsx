@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { setStoredAuth } from "../utils/auth";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -7,7 +8,22 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FBF7F2]">
+    <div className="relative min-h-screen flex items-center justify-center bg-[#FBF7F2]">
+
+      <button
+        type="button"
+        onClick={() => navigate("/")}
+        className="absolute left-6 top-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-50"
+      >
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 9.75V21h13.5V9.75" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 21v-6h4.5v6" />
+          </svg>
+        </span>
+        Home
+      </button>
 
       <div className="bg-white p-8 rounded-2xl shadow-md w-[360px] animate-fade-in">
 
@@ -54,8 +70,11 @@ export default function Login() {
       const data = JSON.parse(text);
       alert("Login successful");
      
-      localStorage.setItem("userId", data.userId);
-      localStorage.setItem("role", data.role.toLowerCase());
+      setStoredAuth({
+        userId: data.userId,
+        name: data.name,
+        role: data.role.toLowerCase(),
+      });
 
       if (data.role.toLowerCase() === "donor") {
         navigate("/donor-dashboard");

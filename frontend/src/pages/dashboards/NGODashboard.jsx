@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import config from "../../config";
+import { clearStoredAuth, getStoredAuth, setStoredName } from "../../utils/auth";
 
 const tabs = [
   "overview",
@@ -40,7 +41,8 @@ export default function NgoDashboard() {
     description: "",
   });
 
-  const ngoId = localStorage.getItem("userId");
+  const { userId: ngoId, name: storedNgoName } = getStoredAuth();
+  const [ngoName, setNgoName] = useState(storedNgoName);
   const navigate = useNavigate();
 
   const fetchDonations = useCallback(async () => {
@@ -61,9 +63,51 @@ export default function NgoDashboard() {
       return;
     }
 
-    fetchDonations().catch(() => setError("Unable to load NGO donations."));
-    fetchRequests().catch(() => {});
+    const refreshDashboard = () => {
+      fetchDonations().catch(() => setError("Unable to load NGO donations."));
+      fetchRequests().catch(() => {});
+    };
+
+    refreshDashboard();
+
+    const handleFocus = () => refreshDashboard();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshDashboard();
+      }
+    }, 15000);
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [fetchDonations, fetchRequests, navigate, ngoId]);
+
+  useEffect(() => {
+    if (!ngoId || ngoName) {
+      return;
+    }
+
+    fetch(`${config.API_URL}/user/${ngoId}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.name) {
+          setNgoName(data.name);
+          setStoredName(data.name);
+        }
+      })
+      .catch(() => {});
+  }, [ngoId, ngoName]);
 
   const stats = useMemo(() => {
     const pending = donations.filter((donation) => donation.status === "pending_ngo").length;
@@ -85,10 +129,10 @@ export default function NgoDashboard() {
 
   const recentDonations = donations.slice(0, 3);
   const ngoRequests = requests.filter((request) => request.ngoId?._id === ngoId);
+  const displayNgoName = ngoName || donations[0]?.ngoId?.name || ngoRequests[0]?.ngoId?.name || "";
 
   const handleLogout = () => {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("role");
+    clearStoredAuth();
     navigate("/login");
   };
 
@@ -191,6 +235,10 @@ export default function NgoDashboard() {
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">NGO Dashboard</p>
               <h2 className="mt-2 text-3xl font-bold text-emerald-950">Review donations, coordinate volunteers, and raise focused needs.</h2>
+              <p className="mt-3 text-base font-medium text-emerald-700">
+                Welcome{displayNgoName ? ", " : ""}
+                {displayNgoName ? <span className="font-bold uppercase tracking-wide text-emerald-800">{displayNgoName}</span> : null}
+              </p>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
                 Keep the same calm green experience as donors while managing approvals, open requests, and final impact on the ground.
               </p>

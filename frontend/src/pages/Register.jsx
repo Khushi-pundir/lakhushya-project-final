@@ -199,15 +199,15 @@ export default function Register() {
             <select className="w-full mt-4 p-3 border" onChange={(e) => setRole(e.target.value)}>
               <option value="">Select Role</option>
               <option>Donor</option>
-              <option>Volunteer</option>
-              <option>NGO</option>
-            </select>
+            <option>Volunteer</option>
+            <option>NGO</option>
+          </select>
 
             {/* PHONE */}
             <div className="flex mt-4">
               <select className="w-1/3 border p-3" value={phoneCode} onChange={(e) => setPhoneCode(e.target.value)}>
                 <option value="+91">🇮🇳 +91</option>
-                <option value="+1">🇺🇸 +1</option>
+       
               </select>
               <input className="w-2/3 border p-3" placeholder="Phone Number" onChange={(e) => setPhone(e.target.value)} />
             </div>
@@ -219,11 +219,14 @@ export default function Register() {
             <input placeholder="State" className="w-full mt-4 p-3 border" onChange={(e) => setStateVal(e.target.value)} />
             <input placeholder="Country" className="w-full mt-4 p-3 border" onChange={(e) => setCountry(e.target.value)} />
 
-            {/* DOB */}
-            <label className="mt-4 block text-sm text-gray-600">
-              Date of Birth
-            </label>
-            <input type="date" className="w-full p-3 border" onChange={(e) => setDob(e.target.value)} />
+            {role !== "NGO" && (
+              <>
+                <label className="mt-4 block text-sm text-gray-600">
+                  Date of Birth
+                </label>
+                <input type="date" className="w-full p-3 border" onChange={(e) => setDob(e.target.value)} />
+              </>
+            )}
 
             {(role === "Donor" || role === "Volunteer") && (
               <input placeholder="Aadhaar Number" className="w-full mt-4 p-3 border" onChange={(e) => setAadhaar(e.target.value)} />
@@ -242,8 +245,11 @@ export default function Register() {
                   return;
                 }
 
-                if (!name || !email || !role || !phone || !address || !city || !pincode || !stateVal || !country || !dob || !password)
+                if (!name || !email || !role || !phone || !address || !city || !pincode || !stateVal || !country || !password)
                   return alert("All fields are required");
+
+                if (role !== "NGO" && !dob)
+                  return alert("Date of birth is required");
 
                 if (!validatePassword(password))
                   return alert("Password must be 8+ chars, 1 uppercase, 1 digit, no spaces");
@@ -251,7 +257,7 @@ export default function Register() {
                 if (password !== confirmPassword)
                   return alert("Passwords do not match");
 
-                if (!isAbove18(dob))
+                if (role !== "NGO" && !isAbove18(dob))
                   return alert("Must be above 18");
 
                 if ((role === "Donor" || role === "Volunteer") && !/^\d{12}$/.test(aadhaar))
@@ -283,7 +289,7 @@ export default function Register() {
                       city,
                       state: normalizedState,
                       nationality: country,
-                      dob,
+                      dob: role === "NGO" ? undefined : dob,
                     lat: location.lat,
                     lng: location.lng
                     })

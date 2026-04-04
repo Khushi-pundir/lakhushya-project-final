@@ -726,11 +726,26 @@ app.post("/login", async (req, res) => {
 
     res.json({
       message: "Login successful",
+      name: user.name,
       role: user.role,
       userId: user._id
     });
   } catch (error) {
     res.status(500).send("Login failed");
+  }
+});
+
+app.get("/user/:userId", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select("name role email");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Unable to load user profile" });
   }
 });
 
@@ -782,7 +797,7 @@ app.post("/donation/create", async (req, res) => {
     if (!userId) {
       return res.status(400).json({ message: "User not logged in" });
     }
-
+    
     const donor = await User.findById(userId);
     if (!donor || donor.role !== "Donor") {
       return res.status(404).json({ message: "Donor not found" });
@@ -879,6 +894,7 @@ app.get("/donation/:donorId", async (req, res) => {
   try {
     const donations = await Donation.find({ donorId: req.params.donorId })
       .sort({ createdAt: -1 })
+      .populate("donorId", "name email phone address city state location impactScore")
       .populate("ngoId", "name address city state location")
       .populate("volunteerId", "name phone points")
       .populate("currentNgoCandidate", "name address city state location")
@@ -912,6 +928,7 @@ app.get("/ngo/donations/:ngoId", async (req, res) => {
     })
       .sort({ createdAt: -1 })
       .populate("donorId", "name phone address city state")
+      .populate("ngoId", "name phone address city state")
       .populate("volunteerId", "name phone points");
 
     res.json(donations);
@@ -1008,6 +1025,7 @@ app.get("/volunteer/pickups/:volunteerId", async (req, res) => {
       .sort({ createdAt: -1 })
       .populate("donorId", "name phone address city state points")
       .populate("ngoId", "name phone address city state")
+      .populate("volunteerId", "name phone points")
       .populate("currentVolunteerCandidate", "name phone points");
 
     res.json(donations);
