@@ -1,472 +1,499 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-export default function NgoDashboard() {
-  const [activeTab, setActiveTab] = useState(
-    localStorage.getItem("activeTab") || "overview"
-  );
-  // eslint-disable-next-line no-unused-vars
-  const [donations, setDonations] = useState([]);
-  const [reqCategory, setReqCategory] = useState("");
-  const [reqQuantity, setReqQuantity] = useState("");
-  const [reqDate, setReqDate] = useState("");
-  const [reqDesc, setReqDesc] = useState("");
+import config from "../../config";
 
+const tabs = [
+  "overview",
+  "manage donations",
+  "raise requests",
+  "analytics",
+];
+
+const statusStyles = {
+  pending_ngo: "bg-amber-100 text-amber-700",
+  ngo_approved: "bg-sky-100 text-sky-700",
+  accepted: "bg-emerald-100 text-emerald-700",
+  picked_up: "bg-blue-100 text-blue-700",
+  delivered: "bg-emerald-100 text-emerald-800",
+  ngo_declined: "bg-rose-100 text-rose-700",
+};
+
+function formatStatus(status = "") {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function badgeStyle(status) {
+  return statusStyles[status] || "bg-slate-100 text-slate-700";
+}
+
+export default function NgoDashboard() {
+  const [activeTab, setActiveTab] = useState(localStorage.getItem("activeTab") || "overview");
+  const [donations, setDonations] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [requests, setRequests] = useState([]);
+  const [form, setForm] = useState({
+    category: "",
+    quantity: "",
+    date: "",
+    description: "",
+  });
+
   const ngoId = localStorage.getItem("userId");
   const navigate = useNavigate();
 
+  const fetchDonations = useCallback(async () => {
+    const response = await fetch(`${config.API_URL}/ngo/donations/${ngoId}`);
+    const data = await response.json();
+    setDonations(Array.isArray(data) ? data : []);
+  }, [ngoId]);
+
+  const fetchRequests = useCallback(async () => {
+    const response = await fetch(`${config.API_URL}/request/all`);
+    const data = await response.json();
+    setRequests(Array.isArray(data) ? data : []);
+  }, []);
+
+  useEffect(() => {
+    if (!ngoId) {
+      navigate("/login");
+      return;
+    }
+
+    fetchDonations().catch(() => setError("Unable to load NGO donations."));
+    fetchRequests().catch(() => {});
+  }, [fetchDonations, fetchRequests, navigate, ngoId]);
+
+  const stats = useMemo(() => {
+    const pending = donations.filter((donation) => donation.status === "pending_ngo").length;
+    const active = donations.filter((donation) =>
+      ["ngo_approved", "accepted", "picked_up"].includes(donation.status)
+    ).length;
+    const completed = donations.filter((donation) => donation.status === "delivered").length;
+    const openRequests = requests.filter(
+      (request) => request.ngoId?._id === ngoId && ["pending", "accepted"].includes(request.status)
+    ).length;
+
+    return {
+      pending,
+      active,
+      completed,
+      openRequests,
+    };
+  }, [donations, requests, ngoId]);
+
+  const recentDonations = donations.slice(0, 3);
+  const ngoRequests = requests.filter((request) => request.ngoId?._id === ngoId);
 
   const handleLogout = () => {
     localStorage.removeItem("userId");
     localStorage.removeItem("role");
     navigate("/login");
   };
-  useEffect(() => {
-    fetch(`http://localhost:5001/ngo/donations/${ngoId}`)
-      .then(res => res.json())
-      .then(data => setDonations(data))
 
-      .catch(err => console.log(err));
-  }, [ngoId]);
-  useEffect(() => {
-    fetch("http://localhost:5001/request/all")
-      .then(res => res.json())
-      .then(data => setRequests(data))
-      .catch(err => console.log(err));
-  }, []);
-  const handleRequestSubmit = async (e) => {
-    e.preventDefault();
-    console.log({
-      reqCategory,
-      reqQuantity,
-      reqDate,
-      reqDesc
-    });
+  const handleRequestSubmit = async (event) => {
+    event.preventDefault();
     setError("");
     setSuccess("");
-    if (!ngoId) {
-      setError("User not logged in");
+
+    const quantityNum = Number(form.quantity);
+    if (!form.category || !form.quantity || !form.date || !form.description.trim()) {
+      setError("All fields are required.");
       return;
     }
-    if (
-      !reqCategory ||
-      !reqQuantity ||
-      !reqDate ||
-      !reqDesc ||
-      reqDesc.trim() === ""
-    ) {
-      setError("All fields required");
-      return;
-    }
-
-    const quantityNum = Number(reqQuantity);
-
     if (quantityNum <= 0) {
-      setError("Quantity must be greater than 0");
+      setError("Quantity must be greater than 0.");
       return;
     }
-    if (quantityNum > 1000) {
-      setError("Please enter a realistic quantity");
-      return;
-    }
-    // Category-based validation
-    if (reqCategory !== "Food" && !Number.isInteger(quantityNum)) {
-      setError("Quantity must be a whole number for this category");
-      return;
-    }
+
     const today = new Date().toISOString().split("T")[0];
-    if (reqDate < today) {
-      setError("Date cannot be in past");
+    if (form.date < today) {
+      setError("Date cannot be in the past.");
       return;
     }
 
     try {
       setLoading(true);
-
-      const res = await fetch("http://localhost:5001/request/create", {
+      const response = await fetch(`${config.API_URL}/request/create`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           ngoId,
-          category: reqCategory,
-          quantity: Number(reqQuantity),
-          date: reqDate,
-          description: reqDesc,
+          category: form.category,
+          quantity: quantityNum,
+          date: form.date,
+          description: form.description.trim(),
         }),
       });
 
-      const text = await res.text();
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Server is not returning JSON. Check backend.");
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to publish request");
       }
 
-
-
-      if (!res.ok) throw new Error(data.message);
-
-      setSuccess("Request published!");
-      const updated = await fetch("http://localhost:5001/request/all");
-      const updatedData = await updated.json();
-      setRequests(updatedData);
-      setReqCategory("");
-      setReqQuantity("");
-      setReqDate("");
-      setReqDesc("");
-
-    } catch (err) {
-      setError(err.message);
+      setSuccess("Request published successfully.");
+      setForm({
+        category: "",
+        quantity: "",
+        date: "",
+        description: "",
+      });
+      await fetchRequests();
+    } catch (submitError) {
+      setError(submitError.message);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleDonationAction = async (donationId, action) => {
+    const endpoint = action === "accept" ? "accept" : "decline";
+    const response = await fetch(`${config.API_URL}/ngo/${endpoint}/${donationId}`, {
+      method: "POST",
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      setError(data.message || "Unable to update donation");
+      return;
+    }
+
+    setSuccess(data.message || "Donation updated.");
+    await fetchDonations();
+  };
+
   return (
-    <div className="min-h-screen bg-[#FBF7F2]">
-
-      {/* ===== NAVBAR ===== */}
-      <div className="bg-white px-10 py-4 flex justify-between items-center shadow-sm">
-        <h1 className="flex items-center gap-2 text-sm">💚 Lakhushya</h1>
-
-        <div className="flex items-center gap-6 text-sm">
-          <span className="cursor-pointer">Home</span>
-          <span className="cursor-pointer">Dashboard</span>
-          <span className="text-gray-500 hidden sm:inline">
-            Welcome, NGO
-          </span>
-          <button onClick={handleLogout}>
-            Logout
-          </button>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f4fbf2_0%,#ffffff_100%)] text-slate-800">
+      <header className="border-b border-emerald-100 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-emerald-950">Lakhushya</h1>
+            <p className="text-sm text-slate-500">Connecting Donations with Purpose</p>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <span className="rounded-full bg-emerald-50 px-4 py-2 text-emerald-700">From Giving to Impact</span>
+            <button
+              onClick={handleLogout}
+              className="rounded-full border border-emerald-200 px-4 py-2 text-emerald-700 transition hover:border-emerald-400 hover:bg-emerald-50"
+            >
+              Logout
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* ===== PAGE HEADER ===== */}
-      <div className="px-10 py-8">
-        <h2 className="text-2xl font-bold text-green-900">
-          NGO Dashboard
-        </h2>
-        <p className="text-gray-600 mt-1">
-          Manage donations and community impact
-        </p>
-      </div>
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <section className="rounded-[32px] bg-white p-6 shadow-lg shadow-emerald-100/50 ring-1 ring-emerald-100 md:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-600">NGO Dashboard</p>
+              <h2 className="mt-2 text-3xl font-bold text-emerald-950">Review donations, coordinate volunteers, and raise focused needs.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                Keep the same calm green experience as donors while managing approvals, open requests, and final impact on the ground.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard label="Pending Donations" value={stats.pending} tone="amber" />
+              <StatCard label="Active Logistics" value={stats.active} tone="sky" />
+              <StatCard label="Completed" value={stats.completed} tone="emerald" />
+              <StatCard label="Open Requests" value={stats.openRequests} tone="emerald" />
+            </div>
+          </div>
+        </section>
 
-      {/* ===== TABS ===== */}
-      <div className="px-10">
-        <div className="bg-[#F2EEE6] rounded-xl p-1 flex gap-2 text-sm w-full overflow-x-auto md:overflow-visible no-scrollbar">
-          {[
-            "overview",
-            "manage donations",
-            "schedule pickups",
-            "raise requests",
-            "analytics",
-          ].map((tab) => (
+        <div className="mt-8 flex gap-2 overflow-x-auto rounded-2xl bg-emerald-50 p-2 no-scrollbar">
+          {tabs.map((tab) => (
             <button
               key={tab}
               onClick={() => {
                 setActiveTab(tab);
                 localStorage.setItem("activeTab", tab);
               }}
-              className={`px-4 py-2 rounded-lg capitalize transition text-center whitespace-nowrap md:flex-1 ${activeTab === tab
-                ? "bg-white text-green-700 font-semibold shadow"
-                : "text-gray-600 hover:bg-white"
-                }`}
+              className={`whitespace-nowrap rounded-2xl px-4 py-2 text-sm font-medium capitalize transition ${
+                activeTab === tab ? "bg-white text-emerald-700 shadow-md" : "text-slate-600 hover:bg-white/70"
+              }`}
             >
               {tab}
             </button>
           ))}
-
         </div>
-      </div>
 
+        {error ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
+        {success ? <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</p> : null}
 
-      {/* ===== OVERVIEW ===== */}
-      {activeTab === "overview" && (
-        <div className="px-10 py-8">
-
-          {/* STATS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: "Pending Donations", value: "12", icon: "⏳" },
-              { label: "People Served", value: "1,240", icon: "❤️" },
-              { label: "This Month", value: "320", icon: "📊" },
-            ].map((item, i) => (
-              <div
-                key={i}
-                className="bg-white p-6 rounded-xl shadow-sm flex justify-between items-center"
-              >
-                <div>
-                  <p className="text-gray-500 text-sm">{item.label}</p>
-                  <h3 className="text-3xl font-bold text-green-600 mt-2">
-                    {item.value}
-                  </h3>
-                </div>
-                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-2xl">
-                  {item.icon}
-                </div>
+        {activeTab === "overview" ? (
+          <section className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-emerald-950">Recent Donations</h3>
+                <button onClick={() => setActiveTab("manage donations")} className="text-sm font-medium text-emerald-700">
+                  Manage all
+                </button>
               </div>
-            ))}
-          </div>
-
-          {/* RECENT DONATIONS & PICKUPS */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
-
-            {/* RECENT DONATIONS */}
-            <div className="bg-white p-6 rounded-xl border">
-              <h3 className="font-semibold mb-4">Recent Donations</h3>
-
-              <div className="space-y-3">
-                {donations.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No donations</p>
-                ) : (
-                  donations.map((donation) => (
-                    <div
-                      key={donation._id}
-                      className="bg-white p-4 rounded-xl border flex justify-between items-center"
-                    >
+              <div className="mt-5 space-y-4">
+                {recentDonations.length ? recentDonations.map((donation) => (
+                  <div key={donation._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="font-medium">{donation.itemName}</p>
-                        <p className="text-xs text-gray-500">
-                          Qty: {donation.quantity} · {donation.donorId?.name}
+                        <p className="text-base font-semibold text-slate-800">{donation.itemName || donation.description}</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Donor: {donation.donorId?.name || "Donor"} • Qty: {donation.quantity}
                         </p>
+                        <p className="mt-2 text-xs text-slate-500">{donation.pickupDate} {donation.pickupTime ? `• ${donation.pickupTime}` : ""}</p>
                       </div>
-
-                      <span
-                        className={`text-xs px-4 py-1 rounded-full ${donation.status === "pending_ngo"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : donation.status === "ngo_approved"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                          }`}
-                      >
-                        {donation.status.replace("_", " ")}
+                      <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${badgeStyle(donation.status)}`}>
+                        {formatStatus(donation.status)}
                       </span>
-
                     </div>
-                  ))
-                )}
+                  </div>
+                )) : <EmptyState title="No donations yet" description="Incoming assigned donations will appear here once donors start contributing." />}
               </div>
             </div>
 
-            {/* TODAY’S PICKUPS */}
-            <div className="bg-white p-6 rounded-xl border">
-              <h3 className="font-semibold mb-4">Today’s Pickups</h3>
-
-              <div className="space-y-3">
-                <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">Food Donation</p>
-                    <p className="text-xs text-gray-500">10:00 AM · Delhi</p>
-                  </div>
-                  <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                    Confirmed
-                  </span>
-                </div>
-
-                <div className="flex justify-between bg-[#F9F7F3] p-3 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium">Clothes</p>
-                    <p className="text-xs text-gray-500">1:00 PM · Jaipur</p>
-                  </div>
-                  <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full">
-                    Pending
-                  </span>
-                </div>
+            <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-emerald-950">Operations Snapshot</h3>
+              <div className="mt-5 space-y-4">
+                <InfoCard label="Need Requests" value={`${stats.openRequests} active`} />
+                <InfoCard label="Volunteer Coordination" value={stats.active ? "In progress" : "No live logistics"} />
+                <InfoCard label="Community Served" value={`${stats.completed * 12} impact points`} />
+                <InfoCard
+                  label="Volunteer Availability"
+                  value={donations.some((donation) => donation.noVolunteerAvailable) ? "No volunteers found on some donations" : "Volunteers available"}
+                />
               </div>
             </div>
+          </section>
+        ) : null}
 
-          </div>
-        </div>
-      )}
+        {activeTab === "manage donations" ? (
+          <section className="mt-8 rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+            <h3 className="text-xl font-semibold text-emerald-950">Manage Donations</h3>
+            <p className="mt-1 text-sm text-slate-500">Accept or decline incoming donations and monitor volunteer availability.</p>
 
-      {/* ===== MANAGE DONATIONS ===== */}
-      {activeTab === "manage donations" && (
-        <div className="px-10 py-8 space-y-4">
-          {donations.length === 0 ? (
-            <p className="text-gray-500 text-sm">No donations</p>
-          ) : (
-            donations.map((donation) => (
-              <div
-                key={donation._id}
-                className="bg-white p-6 rounded-xl border flex justify-between items-center"
-              >
-                <div>
-                  <p className="font-medium">{donation.itemName}</p>
-                  <p className="text-xs text-gray-500">
-                    Qty: {donation.quantity} · {donation.donorId?.name}
-                  </p>
-                </div>
+            <div className="mt-6 space-y-4">
+              {donations.length ? donations.map((donation) => (
+                <div key={donation._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="text-base font-semibold text-slate-800">{donation.itemName || donation.description}</p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Donor: {donation.donorId?.name || "Donor"} • Qty: {donation.quantity} • {donation.category}
+                      </p>
+                      <p className="mt-2 text-xs text-slate-400">{donation.address}</p>
+                      <p className="mt-1 text-xs text-slate-400">{donation.pickupDate} {donation.pickupTime ? `• ${donation.pickupTime}` : ""}</p>
+                    </div>
 
-                {/* RIGHT SIDE */}
-                <div className="flex gap-3 items-center">
-                  {/* PENDING NGO */}
-                  {donation.status === "pending_ngo" && (
-                    <>
-                      <button
-                        className="border px-4 py-1 rounded-lg text-sm"
-                        onClick={() =>
-                          fetch(`http://localhost:5001/ngo/decline/${donation._id}`, {
-                            method: "POST",
-                          }).then(() => window.location.reload())
-                        }
-                      >
-                        Decline
-                      </button>
-
-                      <button
-                        className="bg-green-500 text-white px-4 py-1 rounded-lg text-sm"
-                        onClick={() =>
-                          fetch(`http://localhost:5001/ngo/accept/${donation._id}`, {
-                            method: "POST",
-                          }).then(() => window.location.reload())
-                        }
-                      >
-                        Accept
-                      </button>
-                    </>
-                  )}
-
-                  {/* NGO APPROVED */}
-                  {donation.status === "ngo_approved" && (
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="text-xs bg-green-100 text-green-700 px-4 py-1 rounded-full">
-                        Accepted
+                    <div className="flex flex-col items-end gap-3">
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeStyle(donation.status)}`}>
+                        {formatStatus(donation.status)}
                       </span>
-                      {donation.noVolunteerAvailable ? (
-                        <span className="text-xs bg-rose-100 text-rose-700 px-4 py-1 rounded-full">
+
+                      {donation.status === "pending_ngo" ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDonationAction(donation._id, "decline")}
+                            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            onClick={() => handleDonationAction(donation._id, "accept")}
+                            className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {donation.status === "ngo_approved" && donation.noVolunteerAvailable ? (
+                        <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-700">
                           No volunteers found
                         </span>
                       ) : null}
                     </div>
-                  )}
-
-                  {/* NGO DECLINED */}
-                  {donation.status === "ngo_declined" && (
-                    <span className="text-xs bg-red-100 text-red-700 px-4 py-1 rounded-full">
-                      Declined
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-
-
-
-
-      {/* ===== RAISE REQUESTS ===== */}
-      {activeTab === "raise requests" && (
-        <div className="px-10 py-8 max-w-3xl">
-          <div className="bg-white p-6 rounded-xl border">
-            <h3 className="font-semibold mb-4">Raise Donation Request</h3>
-
-            <form
-              onSubmit={handleRequestSubmit}
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
-
-              <select
-                value={reqCategory || ""}
-                onChange={(e) => {
-                  console.log("Selected:", e.target.value); // DEBUG
-                  setReqCategory(e.target.value);
-                }}
-                className="border p-3 rounded-lg"
-              >
-                <option value="">Select Category</option>
-                <option value="Food">Food</option>
-                <option value="Clothes">Clothes</option>
-                <option value="Books">Books</option>
-              </select>
-
-              <input
-                type="number"
-                step={reqCategory === "Food" ? "0.1" : "1"}
-                placeholder={reqCategory === "Food" ? "Quantity (kg)" : "Quantity (units)"}
-
-                value={reqQuantity}
-                onChange={(e) => setReqQuantity(e.target.value)}
-                className="border p-3 rounded-lg"
-              />
-
-              <input
-                type="date"
-                value={reqDate}
-                onChange={(e) => {
-                  console.log("DATE SELECTED:", e.target.value); // DEBUG
-                  setReqDate(e.target.value);
-                }}
-                className="border p-3 rounded-lg"
-              />
-
-              <textarea
-                placeholder="Description"
-                value={reqDesc}
-                onChange={(e) => setReqDesc(e.target.value)}
-                onBlur={() => setReqDesc(reqDesc.trim())}
-                className="border p-3 rounded-lg md:col-span-2"
-              />
-
-              {error && <p className="text-red-500">{error}</p>}
-              {success && <p className="text-green-600">{success}</p>}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-green-500 text-white px-6 py-2 rounded-lg md:col-span-2"
-              >
-                {loading ? "Submitting..." : "Publish Request"}
-              </button>
-
-            </form>
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">Your Requests</h4>
-
-              {requests
-                .filter(req => req.ngoId?._id === ngoId)
-                .map((req) => (
-                  <div key={req._id} className="border p-3 mb-2 rounded">
-                    <p>Category: {req.category}</p>
-                    <p>Quantity: {req.quantity}</p>
-                    <p>Status: {req.status}</p>
-
-                    {req.status === "accepted" && (
-                      <>
-                        <p>Accepted by: {req.donorId?.name}</p>
-                        <p>Pickup Status: {req.pickupStatus}</p>
-                      </>
-                    )}
                   </div>
-                ))}
+                </div>
+              )) : <EmptyState title="No donation requests" description="Assigned donor donations will appear here for approval." />}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "raise requests" ? (
+          <section className="mt-8 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm md:p-8">
+              <h3 className="text-xl font-semibold text-emerald-950">Raise a Need Request</h3>
+              <p className="mt-2 text-sm text-slate-500">Publish current needs so donors can fulfill them directly.</p>
+
+              <form onSubmit={handleRequestSubmit} className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <SelectField
+                  label="Category"
+                  value={form.category}
+                  onChange={(value) => setForm((previous) => ({ ...previous, category: value }))}
+                  options={["Food", "Clothes", "Books"]}
+                />
+                <TextField
+                  label="Quantity"
+                  type="number"
+                  value={form.quantity}
+                  onChange={(value) => setForm((previous) => ({ ...previous, quantity: value }))}
+                  placeholder="Required quantity"
+                />
+                <TextField
+                  label="Expiry Date"
+                  type="date"
+                  value={form.date}
+                  onChange={(value) => setForm((previous) => ({ ...previous, date: value }))}
+                />
+                <TextAreaField
+                  className="md:col-span-2"
+                  label="Description"
+                  value={form.description}
+                  onChange={(value) => setForm((previous) => ({ ...previous, description: value }))}
+                  placeholder="Describe what is needed and why"
+                />
+                <div className="md:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-2xl bg-emerald-600 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {loading ? "Publishing..." : "Publish Request"}
+                  </button>
+                </div>
+              </form>
             </div>
 
-          </div>
-        </div>
-      )}
-
-      {/* ===== ANALYTICS ===== */}
-      {activeTab === "analytics" && (
-        <div className="px-10 py-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {["Food", "Clothes", "Books", "Hygiene"].map((item, i) => (
-            <div key={i} className="bg-white p-6 rounded-xl border">
-              <p className="text-sm text-gray-500">{item}</p>
-              <h3 className="text-2xl font-bold text-green-600 mt-2">
-                {Math.floor(Math.random() * 500) + 100}
-              </h3>
+            <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+              <h3 className="text-xl font-semibold text-emerald-950">Your Requests</h3>
+              <div className="mt-6 space-y-4">
+                {ngoRequests.length ? ngoRequests.map((request) => (
+                  <div key={request._id} className="rounded-3xl border border-slate-100 bg-slate-50 p-5 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-base font-semibold text-slate-800">{request.category}</p>
+                        <p className="mt-1 text-sm text-slate-500">{request.description}</p>
+                        <p className="mt-2 text-xs text-slate-400">Qty: {request.quantity} • Expires: {request.date}</p>
+                      </div>
+                      <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold ${badgeStyle(request.status)}`}>
+                        {formatStatus(request.status)}
+                      </span>
+                    </div>
+                    {request.status === "accepted" ? (
+                      <p className="mt-3 text-sm text-emerald-700">
+                        Accepted by {request.donorId?.name || "a donor"} • Pickup status: {request.pickupStatus}
+                      </p>
+                    ) : null}
+                  </div>
+                )) : <EmptyState title="No requests yet" description="Publish a need request to make it visible to donors." />}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+          </section>
+        ) : null}
 
+        {activeTab === "analytics" ? (
+          <section className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <StatPanel title="Food Donations" value={donations.filter((donation) => donation.category === "Food").length} />
+            <StatPanel title="Clothes Donations" value={donations.filter((donation) => donation.category === "Clothes").length} />
+            <StatPanel title="Books Donations" value={donations.filter((donation) => donation.category === "Books").length} />
+            <StatPanel title="Volunteer Delays" value={donations.filter((donation) => donation.noVolunteerAvailable).length} />
+          </section>
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
+function StatCard({ label, value, tone }) {
+  const toneClasses = {
+    emerald: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    sky: "bg-sky-50 text-sky-700",
+  };
+
+  return (
+    <div className={`rounded-2xl px-4 py-3 ${toneClasses[tone] || toneClasses.emerald}`}>
+      <p className="text-xs font-medium uppercase tracking-wide">{label}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+    </div>
+  );
+}
+
+function StatPanel({ title, value }) {
+  return (
+    <div className="rounded-[28px] border border-emerald-100 bg-white p-6 shadow-sm">
+      <p className="text-sm text-slate-500">{title}</p>
+      <p className="mt-2 text-3xl font-bold text-emerald-700">{value}</p>
+    </div>
+  );
+}
+
+function InfoCard({ label, value }) {
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-slate-50 p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-2 text-base font-semibold text-slate-700">{value}</p>
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange, placeholder, type = "text" }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-2 w-full rounded-2xl border border-emerald-100 bg-slate-50 px-4 py-3 outline-none transition focus:border-emerald-300"
+      />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <label className="block text-sm font-medium text-slate-700">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-2xl border border-emerald-100 bg-slate-50 px-4 py-3 outline-none transition focus:border-emerald-300"
+      >
+        <option value="">Select</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextAreaField({ label, value, onChange, placeholder, className = "" }) {
+  return (
+    <label className={`block text-sm font-medium text-slate-700 ${className}`}>
+      {label}
+      <textarea
+        rows="4"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-2 w-full rounded-2xl border border-emerald-100 bg-slate-50 px-4 py-3 outline-none transition focus:border-emerald-300"
+      />
+    </label>
+  );
+}
+
+function EmptyState({ title, description }) {
+  return (
+    <div className="rounded-3xl border border-dashed border-emerald-200 bg-emerald-50/70 p-6 text-center">
+      <p className="text-base font-semibold text-emerald-900">{title}</p>
+      <p className="mt-2 text-sm text-slate-500">{description}</p>
     </div>
   );
 }
