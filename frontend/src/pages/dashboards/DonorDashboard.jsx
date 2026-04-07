@@ -195,6 +195,7 @@ export default function DonorDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [successTone, setSuccessTone] = useState("emerald");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [feedbackRating, setFeedbackRating] = useState("5");
   const [feedbackDonationId, setFeedbackDonationId] = useState("");
@@ -356,6 +357,7 @@ export default function DonorDashboard() {
     event.preventDefault();
     setError("");
     setSuccess("");
+    setSuccessTone("emerald");
 
     const {
       category,
@@ -453,7 +455,14 @@ export default function DonorDashboard() {
         throw new Error(data.error || data.message || "Unable to create donation");
       }
 
-      setSuccess("Donation created successfully. The nearest NGO has been mapped below.");
+      const noNgoNearby = data?.donation?.status === "failed";
+      setSuccess(
+        data.message ||
+          (noNgoNearby
+            ? "No NGO nearby within 70 km"
+            : "Donation created successfully. The nearest NGO has been mapped below.")
+      );
+      setSuccessTone(noNgoNearby ? "amber" : "emerald");
       setForm({
         category: "",
         quantity: "",
@@ -472,7 +481,7 @@ export default function DonorDashboard() {
       await fetchRequests();
       localStorage.removeItem("currentRequestId");
       localStorage.removeItem("requestDate");
-      if (data?.donation?._id) {
+      if (data?.donation?._id && data?.donation?.status !== "failed") {
         setSelectedDonationId(data.donation._id);
         setActiveTab("track donations");
       }
@@ -487,6 +496,7 @@ export default function DonorDashboard() {
     event.preventDefault();
     setError("");
     setSuccess("");
+    setSuccessTone("emerald");
 
     if (!feedbackDonationId) {
       setError("Select a delivered donation first.");
@@ -584,7 +594,17 @@ export default function DonorDashboard() {
         </div>
 
         {error ? <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p> : null}
-        {success ? <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</p> : null}
+        {success ? (
+          <p
+            className={`mt-4 rounded-2xl px-4 py-3 text-sm ${
+              successTone === "amber"
+                ? "bg-amber-50 text-amber-800"
+                : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {success}
+          </p>
+        ) : null}
 
         {activeTab === "overview" ? (
           <section className="mt-8 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">

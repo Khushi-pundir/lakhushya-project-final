@@ -27,6 +27,8 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT || 5000);
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/lakhushya_db";
+const MAX_NGO_DISTANCE_KM = Number(process.env.MAX_NGO_DISTANCE_KM || 70);
+const PREFERRED_VOLUNTEER_DISTANCE_KM = Number(process.env.PREFERRED_VOLUNTEER_DISTANCE_KM || 70);
 
 function createMailTransport() {
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -420,7 +422,9 @@ async function findRankedNGOs(donor, donorPoint) {
 
   const anyWithCoordinates = ranked.some((entry) => entry.hasCoordinates);
   if (anyWithCoordinates) {
-    return ranked.filter((entry) => entry.hasCoordinates);
+    return ranked.filter(
+      (entry) => entry.hasCoordinates && entry.distanceKm <= MAX_NGO_DISTANCE_KM
+    );
   }
 
   return ranked.filter((entry) => entry.cityScore > 0 || entry.stateScore > 0);
@@ -440,7 +444,7 @@ async function findRankedVolunteers(referenceUser, referencePoint, excludedIds =
     })
   );
 
-  return volunteers
+  const ranked = volunteers
     .map((volunteer, index) => {
       const volunteerPoint = volunteerEntries[index]?.volunteerPoint || pointFromUser(volunteer);
       const distanceKm = haversineKm(resolvedReferencePoint, volunteerPoint);
@@ -452,6 +456,14 @@ async function findRankedVolunteers(referenceUser, referencePoint, excludedIds =
       };
     })
     .sort((a, b) => a.score - b.score);
+
+  const nearby = ranked.filter(
+    (entry) =>
+      entry.distanceKm !== Number.MAX_SAFE_INTEGER &&
+      entry.distanceKm <= PREFERRED_VOLUNTEER_DISTANCE_KM
+  );
+
+  return nearby.length ? nearby : ranked;
 }
 
 async function assignNextNgo(donation, donor) {
@@ -465,7 +477,10 @@ async function assignNextNgo(donation, donor) {
     donation.ngoId = null;
     donation.status = "failed";
     donation.workflowStatus = "FAILED";
-    await addTimeline(donation, donation.status, "No NGO accepted the donation within 3 attempts.");
+    const failureMessage = ranked.length
+      ? "No NGO accepted the donation within 3 attempts."
+      : `No NGO nearby within ${MAX_NGO_DISTANCE_KM} km.`;
+    await addTimeline(donation, donation.status, failureMessage);
     await donation.save();
     emitDonationUpdate(await loadDonation(donation._id));
     return null;
@@ -880,8 +895,12 @@ app.post("/donation/create", async (req, res) => {
 
     await assignNextNgo(donation, donor);
     const populated = await loadDonation(donation._id);
+    const creationMessage =
+      populated?.status === "failed"
+        ? `No NGO nearby within ${MAX_NGO_DISTANCE_KM} km`
+        : "Donation created successfully";
     res.status(201).json({
-      message: "Donation created successfully",
+      message: creationMessage,
       donation: serializeDonation(populated)
     });
   } catch (error) {
@@ -1006,7 +1025,12 @@ app.post("/ngo/decline/:id", async (req, res) => {
 
     const updated = await loadDonation(donation._id);
     res.json({
-      message: updated.status === "failed" ? "All NGO attempts exhausted" : "Donation sent to next NGO",
+      message:
+        updated.status === "failed"
+          ? ((updated.ngoAttempts || []).length
+              ? "All NGO attempts exhausted"
+              : `No NGO nearby within ${MAX_NGO_DISTANCE_KM} km`)
+          : "Donation sent to next NGO",
       donation: serializeDonation(updated)
     });
   } catch (error) {
